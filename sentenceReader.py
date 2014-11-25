@@ -17,8 +17,8 @@ class Sentence:
             self.parse = None
 
 class SentenceRelation(Sentence):
-    def __init__(self, *args, **kwargs, tag=None):
-        super().__init__(args, kwargs)
+    def __init__(self, tag=None, **kwargs):
+        super().__init__(**kwargs)
         self.tag = tag
 
 #try replacing noun phrases with just generic NP
@@ -113,24 +113,46 @@ def extractAltlex(parse, found=False, preceding='', current=''):
 class SentenceReader:
     def __init__(self, xmlroot):
         self.root = xmlroot
+        self.sentenceType = Sentence
 
+    def sentenceExtractor(self, sentence, parse=True):
+        assert(sentence.tag == 'sentence')
+        tokens = sentence[0]
+        lemmas = []
+        words = []
+        ner = []
+        pos = []
+        for token in tokens:
+            words.append(token[0].text)
+            lemmas.append(token[1].text)
+            pos.append(token[4].text)
+            ner.append(token[5].text)
+        parsing = sentence[1]
+
+        kwargs = {"words": words,
+                  "lemmas": lemmas,
+                  "pos": pos,
+                  "ner": ner}
+
+        if parse:
+            kwargs["parse"] = parsing.text
+                  
+        return kwargs
+        
     def iterSentences(self, parse=True):
-        sentences = self.root[0][0]
+        assert(self.root.tag == 'document')
+        sentences = self.root[0] #self.root[0]
         assert(sentences.tag == 'sentences')
         for sentence in sentences:
-            assert(sentence.tag == 'sentence')
-            tokens = sentence[0]
-            lemmas = []
-            words = []
-            ner = []
-            pos = []
-            for token in tokens:
-                words.append(token[0].text)
-                lemmas.append(token[1].text)
-                pos.append(token[4].text)
-                ner.append(token[5].text)
-            parsing = sentence[1]
-            if parse:
-                yield Sentence(words, lemmas, pos, ner, parsing.text)
-            else:
-                yield Sentence(words, lemmas, pos, ner)
+            yield self.sentenceType(**self.sentenceExtractor(sentence, parse))
+
+class SentenceRelationReader(SentenceReader):
+        def __init__(self, xmlroot):
+            self.root = xmlroot
+            self.sentenceType = SentenceRelation
+
+        def sentenceExtractor(self, sentence, parse=True):
+            kwargs = super().sentenceExtractor(sentence, parse)
+            assert(sentence[2].tag == 'tag')
+            kwargs["tag"] = sentence[2].text
+            return kwargs

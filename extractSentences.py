@@ -61,21 +61,90 @@ def getDotProduct(scores1, scores2):
 
     return dp
 
+#takes in a Sentence object and scores and length and returns the extraction
+class CausalityScorer:
+    def __init__(self):
+        self.seenSentences = set()
+        self.altlexes = getAltlexes()
+        self.causal = getCausalPairs()
+        self.causalLength = getLength(self.causal)
+        '''
+        nonCausal = getNonCausalPairs()
+        nonCausalLength = getLength(nonCausal)
+        '''
+
+    def scoreCausality(self, sentence, prevSentence):
+        lcSentence = ' '.join(sentence.words).lower()
+
+        if lcSentence in self.seenSentences:
+            return None
+        self.seenSentences.add(lcSentence)
+                
+        #only interested in sentences with no explicit discourse marker
+        #because we already used these to create the scores
+        #maybe add this later
+
+        if prevSentence is None:
+            return None
+
+        #only interested in sentences with no altlex
+        if any(lcSentence.startswith(i) for i in self.altlexes):
+            return None
+        
+        #should also count how many of these sentences have some kind of clause as a DO
+                
+        #TODO nonCausalCosSim = getDotProduct(instance, nonCausal)/(nonCausalLength*instanceLength)
+        #print(instanceLength, causalCosSim)
+
+        newAltlex = extractAltlex(sentence.parse)
+        if newAltlex:
+            newAltlex = newAltlex.split()
+            
+            #otherwise make dict out of cartesian product of words
+            instance = defaultdict(dict)
+            for word1 in prevSentence.stems:
+                for word2 in sentence.stems[len(newAltlex):]:
+                    instance[word1][word2] = 1
+
+            instanceLength = getLength(instance)
+            causalCosSim = getDotProduct(instance, self.causal)/(self.causalLength*instanceLength)
+
+            modAltlex = ""
+            prevNamedEntity = ""
+            for i in range(len(newAltlex)):
+                if sentence.pos[i][0] == 'N' and sentence.ner[i] != "O":
+                    if prevNamedEntity != sentence.ner[i]:
+                        modAltlex += sentence.ner[i] + " "
+                        prevNamedEntity = sentence.ner[i]
+                elif sentence.pos[i].startswith('PR'):
+                        modAltlex += sentence.pos[i] + " "
+                        prevNamedEntity = ""
+                elif sentence.pos[i][0].isalpha():
+                        modAltlex += sentence.stems[i] + " "
+                        prevNamedEntity = ""
+                            
+            newAltlex = ' '.join(newAltlex).lower()
+            modSentence = lcSentence.replace(newAltlex, '')
+            
+            return ScoredSentence(causalCosSim, modAltlex, newAltlex, modSentence)
+        else:
+            return None
+
+class ScoredSentence:
+    def __init__(self, causalCosSim, modAltlex, newAltlex, modSentence):
+        self.causalCosSim = causalCosSim
+        self.modAltlex = modAltlex
+        self.newAltlex = newAltlex
+        self.modSentence = modSentence
+        
 if __name__ == '__main__':
     pgr = ParsedGigawordReader(sys.argv[1])
-    altlexes = getAltlexes()
-    causal = getCausalPairs()
-    causalLength = getLength(causal)
-    print("causal length is ", causalLength)
-    '''
-    nonCausal = getNonCausalPairs()
-    nonCausalLength = getLength(nonCausal)
-    '''
+    cs = CausalityScorer()
+    
+    print("causal length is ", cs.causalLength)
 
     altlexFile = open('newaltlexes', 'w')
     pairsFile = open('paired_bootstrapped_causal', 'w')
-
-    seenSentences = set()
 
     try:
         for s in pgr.iterFiles():
@@ -84,72 +153,10 @@ if __name__ == '__main__':
             prevSentence = None
 
             for sentence in sr.iterSentences():
-                lcSentence = ' '.join(sentence.words).lower()
-
-                if lcSentence in seenSentences:
-                    prevSentence = sentence
-                    continue
-                seenSentences.add(lcSentence)
-                
-                #only interested in sentences with no explicit discourse marker
-                #because we already used these to create the scores
-                #maybe add this later
-
-                if prevSentence is None:
-                    prevSentence = sentence
-                    continue
-
-                #if "that 's because" in lcSentence: #
-                #    print(sentence.parse)
-                #continue
-
-                #only interested in sentences with no altlex
-                if any(lcSentence.startswith(i) for i in altlexes):
-                    prevSentence = sentence
-                    continue
-
-                #should also count how many of these sentences have some kind of clause as a DO
-                
-                #nonCausalCosSim = getDotProduct(instance, nonCausal)/(nonCausalLength*instanceLength)
-                #print(instanceLength, causalCosSim)
-
-                newAltlex = extractAltlex(sentence.parse)
-                if newAltlex:
-                    newAltlex = newAltlex.split()
-                    #otherwise make dict out of cartesian product of words
-                    instance = defaultdict(dict)
-                    for word1 in prevSentence.stems:
-                        for word2 in sentence.stems[len(newAltlex):]:
-                            instance[word1][word2] = 1
-
-                    instanceLength = getLength(instance)
-                    causalCosSim = getDotProduct(instance, causal)/(causalLength*instanceLength)
-
-                    print(causalCosSim, end="\t", file=altlexFile)
-
-                    prevNamedEntity = ""
-                    for i in range(len(newAltlex)):
-                        if sentence.pos[i][0] == 'N' and sentence.ner[i] != "O":
-                            if prevNamedEntity != sentence.ner[i]:
-                                print(sentence.ner[i], end=" ", file=altlexFile)
-                                print(sentence.ner[i], end=" ", file=pairsFile)
-                            prevNamedEntity = sentence.ner[i]
-                        elif sentence.pos[i].startswith('PR'):
-                            print(sentence.pos[i], end=" ", file=altlexFile)
-                            print(sentence.pos[i], end=" ", file=pairsFile)
-                            prevNamedEntity = ""
-                        elif sentence.pos[i][0].isalpha():
-                            print(sentence.stems[i], end=" ", file=altlexFile)
-                            print(sentence.stems[i], end=" ", file=pairsFile)
-                            prevNamedEntity = ""
-                    print(file=altlexFile)
-                            
-                    newAltlex = ' '.join(newAltlex).lower()
-                    print("\t{}\t{}\t{}".format(' '.join(prevSentence.words).lower(), newAltlex, lcSentence.replace(newAltlex, '')), file=pairsFile)
-                        
-                    #find a clause (need to check for multiple levels)
-                    #write these sentences out but only if they begin with a clause
-                    #also write out the close
+                ss = cs.scoreCausality(sentence, prevSentence)
+                if ss is not None:
+                    print("{}\t{}".format(ss.causalCosSim, ss.modAltlex), file=altlexFile)
+                    print("{}\t{}\t{}\t{}".format(ss.modAltlex, ' '.join(prevSentence.words).lower(), ss.newAltlex, ss.modSentence), file=pairsFile)
 
                 prevSentence = sentence
 
