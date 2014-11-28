@@ -23,6 +23,92 @@ def wordnet_distance(word1, word2):
 
     return maxy
 
+from extractSentences import CausalityScorer
+class FeatureExtractor:
+    def __init__(self):
+        with open('/home/chidey/PDTB/Discourse/config/markers/markers') as f:
+            self.markers = f.read().splitlines()
+        #self.cs = CausalityScorer()
+        self.validFeatures = {'curr_stem' : self.getCurrStemNgrams,
+                              'prev_stem' : self.getPrevStemNgrams,
+                              #'reporting' : self.getReporting,
+                              #'final_reporting' : self.getFinalReporting,
+                              'coref' : self.getCoref,
+                              #'head verb' : self.getHeadVerb,
+                              #'pronoun' : self.getPronoun,
+                              'intersection' : self.getIntersection,
+                              'altlex_pos' : self.getAltlexPosNgrams,
+                              'altlex_marker' : self.getAltlexMarker,
+                              }
+
+        self.functionFeatures = dict((v,k) for k,v in self.validFeatures.iteritems())
+
+    def getNgrams(self, featureName, gramList, n=(1,2)):
+        features = {}
+        prev = None
+        for curr in gramList:
+            if 1 in n:
+                features['uni: ' + featureName + ': ' + curr] = True
+            if prev:
+                if 2 in n:
+                    features['bi: ' + featureName + ': ' + prev + ' ' + curr] = True
+            prev = curr
+
+        return features
+
+    def getCurrStemNgrams(self, dataPoint):
+        return self.getNgrams(self.functionFeatures[self.getCurrStemNgrams],
+                              dataPoint.getCurrStem())
+
+    def getPrevStemNgrams(self, dataPoint):
+        return self.getNgrams(self.functionFeatures[self.getPrevStemNgrams],
+                              dataPoint.getPrevStem())
+
+    def getCoref(self, dataPoint):
+        altlexLower = dataPoint.getAltlexLower()
+        if 'this' in altlexLower or 'that' in altlexLower:
+            coref = True
+        else:
+            coref = False
+            
+        return {self.functionFeatures[self.getCoref]:
+                coref}
+
+    def getIntersection(self, dataPoint):
+        inter = len(set(dataPoint.getCurrStem()) & set(dataPoint.getPrevStem()))
+        return {self.functionFeatures[self.getIntersection]:
+                inter}
+            
+    def getAltlexPosNgrams(self, dataPoint):
+        return self.getNgrams(self.functionFeatures[self.getAltlexPosNgrams],
+                              dataPoint.getAltlexPos())
+
+    def getAltlexMarker(self, dataPoint):
+        features = {}
+        altlexLower = dataPoint.getAltlexLower()
+        altlexLowerString = ' '.join(altlexLower)
+        for marker in self.markers:
+            if marker in altlexLower or len(marker.split()) > 1 and marker in altlexLowerString:
+                value = True
+            else:
+                value = False
+                
+            features[self.functionFeatures[self.getAltlexMarker] + ' ' + marker] = value
+
+        return features
+    
+    def addFeatures(self, dataPoint, featureSettings):
+        '''add features for the given dataPoint according to which are
+        on or off in featureList'''
+
+        features = {}
+        for featureName in featureSettings:
+            if featureName in self.validFeatures:
+                
+                features.update(self.validFeatures[featureName](dataPoint))
+        return features
+
+
 class Features:
     stop = stopwords.words("english")
     
