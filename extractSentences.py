@@ -1,5 +1,3 @@
-
-#if sys.version_info[0] < 3:
 from __future__ import print_function
 
 from parsedGigawordReader import ParsedGigawordReader
@@ -9,6 +7,10 @@ import sys
 import math
 from collections import defaultdict
 import re
+
+if sys.version_info[0] < 3:
+    class FileNotFoundError(Exception):
+        pass
 
 rwhitespace = re.compile("\s+")
 
@@ -73,6 +75,15 @@ class CausalityScorer:
         nonCausalLength = getLength(nonCausal)
         '''
 
+    def scoreWords(self, words1, words2):
+        instance = defaultdict(dict)
+        for word1 in words1:
+            for word2 in words2:
+                instance[word1][word2] = 1
+
+        instanceLength = getLength(instance)
+        return getDotProduct(instance, self.causal)/(self.causalLength*instanceLength)
+
     def scoreCausality(self, sentence, prevSentence):
         lcSentence = ' '.join(sentence.words).lower()
 
@@ -101,6 +112,10 @@ class CausalityScorer:
             newAltlex = newAltlex.split()
             
             #otherwise make dict out of cartesian product of words
+            causalCosSim = self.scoreWords(prevSentence.stems,
+                                           sentence.stems[len(newAltlex):])
+
+            '''
             instance = defaultdict(dict)
             for word1 in prevSentence.stems:
                 for word2 in sentence.stems[len(newAltlex):]:
@@ -108,6 +123,7 @@ class CausalityScorer:
 
             instanceLength = getLength(instance)
             causalCosSim = getDotProduct(instance, self.causal)/(self.causalLength*instanceLength)
+            '''
 
             modAltlex = ""
             prevNamedEntity = ""
@@ -130,6 +146,44 @@ class CausalityScorer:
         else:
             return None
 
+
+
+class MarkerScorer(CausalityScorer):
+    def __init__(self):
+        self.seenSentences = set()
+        self.markers = getConnectors()
+        self.markerPairs = {}
+        self.markerLengths = {}
+        for marker in self.markers:
+            modMarker = marker.replace(' ', '_')
+            try:
+                self.markerPairs[marker] = getPairs('/home/chidey/PDTB/Discourse3/wordpairs/gigaword/content_word_pairs_stemmed_tfidf_adj_culled/' + modMarker)
+            except IOError: #FileNotFoundError:
+                continue
+            except Exception:
+                print('unknown exception in MarkerScorer')
+                continue
+            if len(self.markerPairs[marker]):
+                self.markerLengths[marker] = getLength(self.markerPairs[marker])
+            else:
+                del self.markerPairs[marker]
+                
+    def scoreWords(self, words1, words2):
+        instance = defaultdict(dict)
+        for word1 in words1:
+            for word2 in words2:
+                instance[word1][word2] = 1
+
+        instanceLength = getLength(instance)
+        dotProducts = {}
+        for marker in self.markerPairs:
+            dotProducts[marker] = getDotProduct(instance,
+                                                self.markerPairs[marker]) / \
+                                                (self.markerLengths[marker] * \
+                                                instanceLength)
+
+        return dotProducts
+    
 class ScoredSentence:
     def __init__(self, causalCosSim, modAltlex, newAltlex, modSentence):
         self.causalCosSim = causalCosSim

@@ -10,7 +10,7 @@ if __name__ == '__main__':
         counts[pos] = defaultdict(int)
         counts[pos + '_causal'] = defaultdict(int)
     
-    #look for nn/np,vv/vb,rb,jj
+    #look for nn/vv/rb/jj
     directory = sys.argv[1]
     files = os.listdir(directory)
     for fi in files:
@@ -24,9 +24,9 @@ if __name__ == '__main__':
                 word = cols[2]
                 pos = cols[3].lower()
                 role = cols[11].lower()
-                if 'nn' in pos or 'np' in pos:
+                if pos.startswith('n'): #'nn' in pos or 'np' in pos:
                     pos = 'nn'
-                elif 'vv' in pos or 'vb' in pos:
+                elif pos.startswith('v'): #'vv' in pos or 'vb' in pos:
                     pos = 'vv'
                 elif 'rb' in pos:
                     pos = 'rb'
