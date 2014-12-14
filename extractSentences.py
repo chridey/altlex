@@ -1,7 +1,8 @@
 from __future__ import print_function
 
 from parsedGigawordReader import ParsedGigawordReader
-from sentenceReader import SentenceReader,extractAltlex
+from sentenceReader import SentenceReader
+from treeUtils import extractAltlex
 
 import sys
 import math
