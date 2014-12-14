@@ -19,7 +19,7 @@ from svm import SVM
 from gridSearchSVM import GridSearchSVM
 from logisticRegression import LogisticRegression
 
-classifierType = LogisticRegression #GridSearchSVM #RandomForest #AdaBoost #NaiveBayes #SVM #
+classifierType = LogisticRegression #RandomForest #GridSearchSVM #AdaBoost #NaiveBayes #SVM #
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
@@ -47,12 +47,12 @@ if 0:
 
 #first create dataset and assign features
 fe = FeatureExtractor()
-settingKeys = list(fe.experimentalSettings.keys())
+settingKeys = list(fe.experimentalSettings)
 
 for settingValues in itertools.product((True,False),
                                        repeat=len(settingKeys)):
-    featureSettings = dict(zip(settingKeys, settingValues))
-    featureSettings.update(fe.defaultSettings)
+    featureSettings = fe.defaultSettings.copy()
+    featureSettings.update(dict(zip(settingKeys, settingValues)))
         
     print(featureSettings)
 

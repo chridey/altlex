@@ -86,16 +86,34 @@ class DataPoint:
 
         return self.currParse
 
-    def getStemsForPos(self, pos, part):
+    def _getAltlex(self, form='words'):
+        assert(form in ('words', 'lemmas', 'stems'))
+        if self.altlexLength > 0:
+            return self._dataDict['sentences'][0][form][:self.altlexLength]
+        else:
+            return None
+
+    def _getCurr(self, form='words'):
+        assert(form in ('words', 'lemmas', 'stems'))
+        return self._dataDict['sentences'][0][form]
+
+    def _getPrev(self, form='words'):
+        assert(form in ('words', 'lemmas', 'stems'))
+        if self.altlexLength > 0:
+            return self._dataDict['sentences'][1][form]
+        else:
+            return None
+
+    def getStemsForPos(self, pos, part, form='stems'):
         if part == 'altlex':
             posList = self.getAltlexPos()
-            stems = self.getAltlexStem()
+            stems = self._getAltlex(form)
         elif part == 'previous':
             posList = self.getPrevPos()
-            stems = self.getPrevStem()
+            stems = self._getPrev(form)
         elif part == 'current':
             posList = self.getCurrPos()
-            stems = self.getCurrStem()
+            stems = self._getCurr(form)
         else:
             raise NotImplementedError
         

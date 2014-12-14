@@ -3,11 +3,12 @@ from collections import defaultdict
 
 from nltk.corpus.reader.wordnet import WordNetError
 from nltk.corpus import wordnet  as wn
-from nltk.corpus import stopwords
+#from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
 
 from extractSentences import CausalityScorer,MarkerScorer
 from treeUtils import extractRightSiblings, extractSelfCategory, extractParentCategory
+from wordNetManager import WordNetManager
 
 def wordnet_distance(word1, word2):
     maxy = 0
@@ -36,6 +37,7 @@ class FeatureExtractor:
             self.markers = f.read().splitlines()
         self.cs = None
         self.ms = None
+        self.wn = WordNetManager()
         self.reporting = set(wn.synsets('say', pos=wn.VERB))
         self.framenetScores = {'nn' : None,
                                'vb' : None,
@@ -47,10 +49,14 @@ class FeatureExtractor:
                               'prev_stem' : self.getPrevStemNgrams,
                               'reporting' : self.getReporting,
                               'final_reporting' : self.getFinalReporting,
+                              'noun_similarity' : self.getNounSimilarity,
                               'coref' : self.getCoref,
                               'head_verb_altlex' : self.getHeadVerbCatAltlex,
                               'head_verb_curr' : self.getHeadVerbCatCurr,
                               'head_verb_prev' : self.getHeadVerbCatPrev,
+                              'noun_cat_altlex' : self.getNounCatAltlex,
+                              'noun_cat_curr' : self.getNounCatCurr,
+                              'noun_cat_prev' : self.getNounCatPrev,
                               'has_copula' : self.getCopula,
                               #'pronoun' : self.getPronoun,
                               'intersection' : self.getIntersection,
@@ -72,21 +78,24 @@ class FeatureExtractor:
 
     @property
     def experimentalSettings(self):
-        return {'self_category' : True,
-                'parent_category': True}
         return {
-            'productions' : True,
-            'altlex_stem' : True, #doesnt help for NB, inconclusive for n=1 and RF
-            #'curr_stem' : True, #doesnt help
-            #'prev_stem' : True, #doesnt help
-            'reporting' : True, #inconclusive
-            'has_copula' : True, #doesnt help
-            #'pronoun' : True, #not tested
-            'intersection' : True, #inconclusive
-            'noun_intersection' : True, #seems to hurt
-            'cosine' : True, #inconclusive
-            'marker_cosine' : True, #inconclusive
-            #'tense': True, #doesnt help
+            }
+        return {
+            'productions' ,
+            'altlex_stem' , #doesnt help for NB, inconclusive for n=1 and RF
+            #'curr_stem' , #doesnt help
+            #'prev_stem' , #doesnt help
+            'reporting' , #inconclusive
+            #'pronoun' , #not tested
+            'intersection' , #inconclusive
+            'noun_intersection' , #seems to hurt
+            'cosine' , #inconclusive
+            'marker_cosine' , #inconclusive
+            #'tense', #doesnt help
+            'parent_category', #doesnt help
+            'noun_similarity', #inconclusive
+            'noun_cat_curr', #seems to hurt
+            'noun_cat_prev', #seems to hurt
         }
 
     @property
@@ -100,8 +109,11 @@ class FeatureExtractor:
             'head_verb_altlex' : True,
             'head_verb_curr' : True,
             'head_verb_prev' : True,
+            'noun_cat_altlex' : True, #seems to help
             'framenet' : True,
             'right_siblings' : True,
+            'has_copula' : True, #seems to help
+            'self_category' : True, #seems to help
             }
 
     def getNgrams(self, featureName, gramList, n=(1,2)):
@@ -217,6 +229,23 @@ class FeatureExtractor:
                 wordnet_distance("say",
                                  dataPoint.getAltlexLemmatized()[-1])}
 
+    #wordnet similarity between all nouns in altlex and prev sentence
+    #may provide another way of measuring coref
+    @lru_cache(maxsize=None)
+    def getNounSimilarity(self, dataPoint):
+        prevNouns = dataPoint.getStemsForPos('N', 'previous', 'lemmas')
+        altlexNouns = dataPoint.getStemsForPos('N', 'altlex', 'lemmas')
+
+        maxy = 0
+        for prev in prevNouns:
+            for curr in altlexNouns:
+                wnsim = self.wn.distance(prev, curr, 'N')
+                if wnsim > maxy:
+                    maxy = wnsim
+
+        return {self.functionFeatures[self.getNounSimilarity] :
+                maxy}
+    
     @lru_cache(maxsize=None)
     def getCosineSim(self, dataPoint):
         if self.cs is None:
@@ -238,9 +267,49 @@ class FeatureExtractor:
 
         return ret
 
+    def _getWordNetCat(self, name, pos, lemmas):
+        features = {}
+        for lemma in lemmas:
+            #print(pos, lemma)
+            synsetCounts = defaultdict(int)
+            for synset in wn.synsets(lemma,
+                                     pos=self.wn.wordNetPOS[pos]):
+                synsetCounts[synset] += 1
+            if len(synsetCounts):
+                features[name + \
+                         max(synsetCounts,
+                             key=synsetCounts.get).lexname()] = True
+
+        if not len(features):
+            return {name + 'None' : True}
+
+        return features
+        
+    @lru_cache(maxsize=None)
+    def getNounCatAltlex(self, dataPoint):
+        return self._getWordNetCat(self.functionFeatures[self.getNounCatAltlex],
+                                   'N', dataPoint.getStemsForPos('N',
+                                                                 'altlex',
+                                                                 'lemmas'))
+    
+    @lru_cache(maxsize=None)
+    def getNounCatCurr(self, dataPoint):
+        return self._getWordNetCat(self.functionFeatures[self.getNounCatCurr],
+                                   'N', dataPoint.getStemsForPos('N',
+                                                                 'current',
+                                                                 'lemmas'))
+    
+    @lru_cache(maxsize=None)
+    def getNounCatPrev(self, dataPoint):
+        return self._getWordNetCat(self.functionFeatures[self.getNounCatPrev],
+                                   'N', dataPoint.getStemsForPos('N',
+                                                                 'previous',
+                                                                 'lemmas'))
+
+    #modify for nouns
     def _getHeadVerbCat(self, name, pos, lemmas):
         features = {}
-        #need to add wordnet categories for head verb (this reduced false positives in the other test)
+        #add wordnet categories for head verb (this reduced false positives in the other test)
         #do this for 1) head of altlex and 2) head of sentence
 
         for (index,p) in enumerate(pos):
@@ -255,7 +324,9 @@ class FeatureExtractor:
                     features[name + \
                              max(synsetCounts,
                                  key=synsetCounts.get).lexname()] = True
-                #break
+
+        if not len(features):
+            return {name + 'None' : True}
 
         return features
     
@@ -343,6 +414,8 @@ class FeatureExtractor:
 
     #syntactic features based on work by Pitler, Biran
     #also consider syntactic angles
+    #production rules seems to cause overtraining for such a small dataset
+    #what about just production rules within the altlex?
     @lru_cache(maxsize=None)
     def getProductionRules(self, dataPoint):
         '''return the nonlexical production rules for the tree'''
@@ -361,6 +434,8 @@ class FeatureExtractor:
         #print(tree, siblings)
         return {self.functionFeatures[self.getRightSiblings] + s :
                 True for s in siblings}
+
+    #how about right sibling contains a VP or trace?
 
     @lru_cache(maxsize=None)
     def getSelfCategory(self, dataPoint):
@@ -396,3 +471,5 @@ class FeatureExtractor:
         return features
 
 
+#verbnet features?
+#lexpar features?
