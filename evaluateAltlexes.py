@@ -14,11 +14,25 @@ from featureExtractor import FeatureExtractor
 from dataPoint import DataPoint
 from randomForest import RandomForest
 from naiveBayes import NaiveBayes
+from adaBoost import AdaBoost
+from svm import SVM
+from gridSearchSVM import GridSearchSVM
+from logisticRegression import LogisticRegression
 
-classifierType = RandomForest
+classifierType = LogisticRegression #GridSearchSVM #RandomForest #AdaBoost #NaiveBayes #SVM #
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
+
+if 0:
+    count = collections.defaultdict(int)
+    for dataPoint in data:
+        dp = DataPoint(dataPoint)
+        count[' '.join(dp.getAltlex())] += 1
+
+    for s in sorted(count, key=count.get):
+        print(s, count[s])
+    exit()
 
 #list of features
 #curr stem ngrams
@@ -33,22 +47,12 @@ with open(sys.argv[1]) as f:
 
 #first create dataset and assign features
 fe = FeatureExtractor()
-settingKeys = list(fe.defaultSettings.keys())
+settingKeys = list(fe.experimentalSettings.keys())
 
 for settingValues in itertools.product((True,False),
                                        repeat=len(settingKeys)):
     featureSettings = dict(zip(settingKeys, settingValues))
-    featureSettings.update(
-        {'altlex_marker': True,
-         'coref': True,
-         'final_reporting': True,
-         'altlex_pos': True,
-         'altlex_length': True,
-         'head_verb_altlex' : True,
-         'head_verb_curr' : True,
-         'head_verb_prev' : True,
-         }
-        )
+    featureSettings.update(fe.defaultSettings)
         
     print(featureSettings)
 
@@ -86,18 +90,21 @@ for settingValues in itertools.product((True,False),
         else:
             nonCausalSet.append((features, False))
 
-#now set aside at least 200 causal examples for testing or 30%, whichever is greater
-    numCausalTesting = int(max(200, len(causalSet)*.3))
+    print("True points: {} False points: {}".format(len(causalSet),
+                                                    len(nonCausalSet)))
+
+#now set aside at least 150 causal examples for testing or 30%, whichever is greater
+    numCausalTesting = int(max(150, len(causalSet)*.3))
     numCausalTraining = len(causalSet) - numCausalTesting
     proportion = numCausalTesting/len(causalSet)
     numNonCausalTraining = int((1-proportion) * len(nonCausalSet))
-    oversamplingRatio = int(numNonCausalTraining/numCausalTraining)
-    numNonCausalTraining = numCausalTraining * oversamplingRatio
-    numNonCausalTesting = len(nonCausalSet)-numNonCausalTraining
+    #oversamplingRatio = int(numNonCausalTraining/numCausalTraining)
+    #numNonCausalTraining = numCausalTraining * oversamplingRatio
+    #numNonCausalTesting = len(nonCausalSet)-numNonCausalTraining
 
 #now set aside 30% for testing and oversample the causal training data to be balanced
     training = nonCausalSet[:numNonCausalTraining] + \
-               causalSet[:numCausalTraining] * oversamplingRatio
+               causalSet[:numCausalTraining] #* oversamplingRatio
     testing = nonCausalSet[numNonCausalTraining:] + \
               causalSet[numCausalTraining:]
 
@@ -106,8 +113,14 @@ for settingValues in itertools.product((True,False),
     #      len(testing), numNonCausalTesting/len(testing))
 
     classifier = classifierType()
-    classifier.train(training)
 
+    if True:
+        classifier.crossvalidate(training)
+        classifier.show_most_informative_features(50)
+        continue
+    
+    classifier.train(training)
+    
     refsets = collections.defaultdict(set)
     testsets = collections.defaultdict(set)
     truepos = 0
@@ -140,3 +153,5 @@ for settingValues in itertools.product((True,False),
     print(classifier.accuracy(testing))
     
     classifier.show_most_informative_features(50)
+
+classifier.save("model")

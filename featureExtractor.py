@@ -1,13 +1,13 @@
 from functools import lru_cache
 from collections import defaultdict
 
-import nltk
 from nltk.corpus.reader.wordnet import WordNetError
 from nltk.corpus import wordnet  as wn
 from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
 
 from extractSentences import CausalityScorer,MarkerScorer
+from treeUtils import extractRightSiblings, extractSelfCategory, extractParentCategory
 
 def wordnet_distance(word1, word2):
     maxy = 0
@@ -38,7 +38,7 @@ class FeatureExtractor:
         self.ms = None
         self.reporting = set(wn.synsets('say', pos=wn.VERB))
         self.framenetScores = {'nn' : None,
-                               'vv' : None,
+                               'vb' : None,
                                'rb' : None,
                                'jj' : None}
 
@@ -54,6 +54,7 @@ class FeatureExtractor:
                               'has_copula' : self.getCopula,
                               #'pronoun' : self.getPronoun,
                               'intersection' : self.getIntersection,
+                              'noun_intersection' : self.getNounIntersection,
                               'altlex_pos' : self.getAltlexPosNgrams,
                               'altlex_marker' : self.getAltlexMarker,
                               'altlex_length': self.getAltlexLength,
@@ -61,31 +62,46 @@ class FeatureExtractor:
                               'marker_cosine' : self.getMarkerCosineSim,
                               'tense' : self.getTense,
                               'framenet' : self.getFramenetScore,
+                              'right_siblings' : self.getRightSiblings,
+                              'self_category' : self.getSelfCategory,
+                              'parent_category' : self.getParentCategory,
+                              'productions' : self.getProductionRules,
                               }
 
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
 
     @property
+    def experimentalSettings(self):
+        return {'self_category' : True,
+                'parent_category': True}
+        return {
+            'productions' : True,
+            'altlex_stem' : True, #doesnt help for NB, inconclusive for n=1 and RF
+            #'curr_stem' : True, #doesnt help
+            #'prev_stem' : True, #doesnt help
+            'reporting' : True, #inconclusive
+            'has_copula' : True, #doesnt help
+            #'pronoun' : True, #not tested
+            'intersection' : True, #inconclusive
+            'noun_intersection' : True, #seems to hurt
+            'cosine' : True, #inconclusive
+            'marker_cosine' : True, #inconclusive
+            #'tense': True, #doesnt help
+        }
+
+    @property
     def defaultSettings(self):
         return {
-            'altlex_stem' : True,
-            'curr_stem' : True,
-            'prev_stem' : True,
-            'reporting' : True,
-            #'final_reporting' : True,
-            #'coref' : True,
-            #'head_verb_altlex' : True,
-            #'head_verb_curr' : True,
-            #'head_verb_prev' : True,
-            #'has_copula' : True,
-            #'pronoun' : 
-            #'intersection' : True,
-            #'altlex_pos' : True,
-            #'altlex_marker' : True,
-            #'altlex_length' : True,
-            'cosine' : True,
-            #'marker_cosine' : True,
-            #'tense': True
+            'coref': True,
+            'final_reporting': True,
+            'altlex_pos': True,
+            'altlex_marker': True,
+            'altlex_length': True,
+            'head_verb_altlex' : True,
+            'head_verb_curr' : True,
+            'head_verb_prev' : True,
+            'framenet' : True,
+            'right_siblings' : True,
             }
 
     def getNgrams(self, featureName, gramList, n=(1,2)):
@@ -104,7 +120,8 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getAltlexStemNgrams(self, dataPoint):
         return self.getNgrams(self.functionFeatures[self.getAltlexStemNgrams],
-                              dataPoint.getAltlexStem())
+                              dataPoint.getAltlexStem(),
+                              (1,))
 
     @lru_cache(maxsize=None)
     def getCurrStemNgrams(self, dataPoint):
@@ -119,7 +136,9 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getCoref(self, dataPoint):
         altlexLower = dataPoint.getAltlexLower()
-        if 'this' in altlexLower or 'that' in altlexLower:
+        #also these, those
+        if 'this' in altlexLower or 'that' in altlexLower \
+               or 'these' in altlexLower or 'those' in altlexLower:
             coref = True
         else:
             coref = False
@@ -129,9 +148,17 @@ class FeatureExtractor:
 
     @lru_cache(maxsize=None)
     def getIntersection(self, dataPoint):
-        #batch these features in groups of 5
         inter = len(set(dataPoint.getCurrStem()) & set(dataPoint.getPrevStem()))
         return {self.functionFeatures[self.getIntersection]:
+                inter}
+
+    @lru_cache(maxsize=None)
+    def getNounIntersection(self, dataPoint):
+        prevNouns = dataPoint.getStemsForPos('N', 'previous')
+        altlexNouns = dataPoint.getStemsForPos('N', 'altlex')
+        
+        inter = len(set(prevNouns) & set(altlexNouns))
+        return {self.functionFeatures[self.getNounIntersection]:
                 inter}
 
     @lru_cache(maxsize=None)
@@ -177,7 +204,8 @@ class FeatureExtractor:
             else:
                 value = False
         except IndexError:
-            print (altlex, dataPoint['sentences'][0]['parse'])
+            #print (dataPoint.getAltlexLower(),
+            #       dataPoint.getCurrParse())
             value = False
 
         return {self.functionFeatures[self.getReporting] :
@@ -257,11 +285,12 @@ class FeatureExtractor:
         for i in range(dataPoint.altlexLength):
             if pos[i][0] == 'V' and words[i] in {'is',
                                                  "'s",
-                                                 "was",
-                                                 "were",
-                                                 "been",
-                                                 "am",
-                                                 "are"}:
+                                                 'was',
+                                                 'were',
+                                                 'been',
+                                                 'am',
+                                                 'are',
+                                                 'being'}:
                 value = True
                 break
 
@@ -279,6 +308,7 @@ class FeatureExtractor:
                                  True})
         return features                                 
 
+    @lru_cache(maxsize=None)
     def getFramenetScore(self, dataPoint):
         #sum of probabilities of encoding causality for words for different parts of speech
         #stem and lowercase
@@ -287,11 +317,73 @@ class FeatureExtractor:
                 self.framenetScores[pos] = {}
                 with open('/home/chidey/PDTB/' + pos) as f:
                     for line in f:
-                        pos,word,count1,count2,score = line.split()
-                        self.framenetScores[pos][wn.stem(word.lower())] = score
+                        p,word,count1,count2,score = line.split()
+                        score = float(score)
+                        if score > 0.0:
+                            self.framenetScores[pos][self.sn.stem(word.lower())] \
+                                = score
 
+        #for now just do one aggregate score, also try different parts of speech
+        #variations - only look at altlex or post altlex or entire sentence
+        #           - look at previous sentence
+        #           - combined score for all parts of speech
+        #           - individual scores
+        score = defaultdict(float)
+        length = dataPoint.altlexLength
         
-                        
+        for i in range(length):
+            pos = dataPoint.getCurrPos()[i][:2].lower()
+            stem = dataPoint.getCurrStem()[i]
+            if pos in self.framenetScores and stem in self.framenetScores[pos]:
+                score[''] += self.framenetScores[pos][stem]
+
+        #print(score)
+        return {self.functionFeatures[self.getFramenetScore] + pos :
+                score[pos] for pos in score}
+
+    #syntactic features based on work by Pitler, Biran
+    #also consider syntactic angles
+    @lru_cache(maxsize=None)
+    def getProductionRules(self, dataPoint):
+        '''return the nonlexical production rules for the tree'''
+        tree = dataPoint.getCurrParse()
+        return {self.functionFeatures[self.getProductionRules] + str(s) :
+                True for s in tree.productions() if s.is_nonlexical()}
+
+    #consider other things to do with siblings
+    #use only the immediate right sibling, unless it is a punctuation or modifying phrase
+    #print all the patterns of altlexes that we see (could use for bootstrapping)
+    @lru_cache(maxsize=None)
+    def getRightSiblings(self, dataPoint):
+        tree = dataPoint.getCurrParse()
+        siblings = extractRightSiblings(dataPoint.getAltlex(), tree)
+
+        #print(tree, siblings)
+        return {self.functionFeatures[self.getRightSiblings] + s :
+                True for s in siblings}
+
+    @lru_cache(maxsize=None)
+    def getSelfCategory(self, dataPoint):
+        #could be none if altlex is not fully contained in a constituent
+        tree = dataPoint.getCurrParse()
+        cat = extractSelfCategory(dataPoint.getAltlex(),
+                                  dataPoint.getCurrParse())
+
+        #print(tree, cat)
+        return {self.functionFeatures[self.getSelfCategory] + str(cat) :
+                True}
+        
+    @lru_cache(maxsize=None)
+    def getParentCategory(self, dataPoint):
+        #parent of self category
+        #could be none if altlex is not fully contained in a constituent
+        cat = extractParentCategory(dataPoint.getAltlex(),
+                                    dataPoint.getCurrParse())
+
+        return {self.functionFeatures[self.getParentCategory] + str(cat) :
+                True}
+        
+
     def addFeatures(self, dataPoint, featureSettings):
         '''add features for the given dataPoint according to which are
         on or off in featureList'''
@@ -303,4 +395,4 @@ class FeatureExtractor:
                 features.update(self.validFeatures[featureName](dataPoint))
         return features
 
-#presence of causal verbs (from framenet)
+
