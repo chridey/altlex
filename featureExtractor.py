@@ -79,41 +79,48 @@ class FeatureExtractor:
     @property
     def experimentalSettings(self):
         return {
-            }
-        return {
-            'productions' ,
-            'altlex_stem' , #doesnt help for NB, inconclusive for n=1 and RF
-            #'curr_stem' , #doesnt help
-            #'prev_stem' , #doesnt help
-            'reporting' , #inconclusive
             #'pronoun' , #not tested
-            'intersection' , #inconclusive
-            'noun_intersection' , #seems to hurt
-            'cosine' , #inconclusive
-            'marker_cosine' , #inconclusive
             #'tense', #doesnt help
-            'parent_category', #doesnt help
-            'noun_similarity', #inconclusive
-            'noun_cat_curr', #seems to hurt
-            'noun_cat_prev', #seems to hurt
         }
 
     @property
     def defaultSettings(self):
         return {
-            'coref': True,
-            'final_reporting': True,
-            'altlex_pos': True,
-            'altlex_marker': True,
-            'altlex_length': True,
+            #structural features
+            'altlex_length' : True,
+
+            #word
+            'coref' : True,
+            'has_copula' : True, #seems to help
+            'altlex_marker' : True,
+            'altlex_stem' : False, #doesnt help for NB, inconclusive for n=1 and RF
+            'curr_stem' : False, #doesnt help
+            'prev_stem' : False, #doesnt help
+
+            'intersection' : False, #inconclusive
+            'noun_intersection' : False, #seems to hurt
+
+            'cosine' : False, #inconclusive
+            'marker_cosine' : False, #inconclusive
+
+            #semantic
+            'final_reporting' : True,
+            'reporting' : False, #inconclusive
             'head_verb_altlex' : True,
             'head_verb_curr' : True,
             'head_verb_prev' : True,
             'noun_cat_altlex' : True, #seems to help
+            'noun_cat_curr' : False, #seems to hurt
+            'noun_cat_prev' : False, #seems to hurt
+            'noun_similarity' : False, #inconclusive
             'framenet' : True,
+
+            #syntactic
+            'altlex_pos': True,
             'right_siblings' : True,
-            'has_copula' : True, #seems to help
             'self_category' : True, #seems to help
+            'parent_category' : False, #doesnt help
+            'productions' : False, #seems to overtrain
             }
 
     def getNgrams(self, featureName, gramList, n=(1,2)):
@@ -440,11 +447,9 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getSelfCategory(self, dataPoint):
         #could be none if altlex is not fully contained in a constituent
-        tree = dataPoint.getCurrParse()
         cat = extractSelfCategory(dataPoint.getAltlex(),
                                   dataPoint.getCurrParse())
 
-        #print(tree, cat)
         return {self.functionFeatures[self.getSelfCategory] + str(cat) :
                 True}
         
