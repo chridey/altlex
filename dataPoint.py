@@ -1,8 +1,11 @@
+from nltk import Tree
+
 class DataPoint:
     def __init__(self, dataDict):
         self._dataDict = dataDict
         self._altlexLower = None
-
+        self._currParse = None
+        
     def __hash__(self):
         return ' '.join(self.getPrevWords() + self.getCurrWords()).__hash__()
 
@@ -74,3 +77,32 @@ class DataPoint:
 
     def getCurrPosPostAltlex(self):
         return self.getCurrPos()[self.altlexLength:]
+
+    def getCurrParse(self):
+        if self._currParse is not None:
+            return self._currParse
+
+        self.currParse = Tree.fromstring(self._dataDict['sentences'][0]['parse'])
+
+        return self.currParse
+
+    def getStemsForPos(self, pos, part):
+        if part == 'altlex':
+            posList = self.getAltlexPos()
+            stems = self.getAltlexStem()
+        elif part == 'previous':
+            posList = self.getPrevPos()
+            stems = self.getPrevStem()
+        elif part == 'current':
+            posList = self.getCurrPos()
+            stems = self.getCurrStem()
+        else:
+            raise NotImplementedError
+        
+        posInstances = []
+        for (index,p) in enumerate(posList):
+            if p.startswith(pos):
+                posInstances.append(stems[index])
+                break
+
+        return posInstances
