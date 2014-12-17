@@ -138,10 +138,16 @@ def extractParse(phrase, parse, getSiblings=True):
 
 def extractRightSiblings(phrase, parse):
     siblings = extractParse(phrase, parse)
+    if siblings is None:
+        return []
     return [s.label() for s in siblings]
 
 def _extractSelfCategoryIndex(phrase, parse):
     treeIndex = extractParse(phrase, parse, False)
+
+    if treeIndex is None:
+        print('cant find {} in {}'.format(phrase, parse))
+        return None
     
     #iteratively check if parent node contains the entire phrase and only the phrase
     parentIndex = treeIndex[:-1]
@@ -151,6 +157,12 @@ def _extractSelfCategoryIndex(phrase, parse):
         parentIndex = parentIndex[:-1]
 
     return None
+
+def extractSelfParse(phrase, parse):
+    try:
+        return parse[_extractSelfCategoryIndex(phrase,parse)]
+    except TypeError:
+        return None
 
 def extractSelfCategory(phrase, parse):
     catIndex = _extractSelfCategoryIndex(phrase,parse)
