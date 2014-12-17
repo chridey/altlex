@@ -10,6 +10,7 @@ import itertools
 
 import nltk
 
+from utils import splitData
 from featureExtractor import FeatureExtractor
 from dataPoint import DataPoint
 from randomForest import RandomForest
@@ -19,31 +20,10 @@ from svm import SVM
 from gridSearchSVM import GridSearchSVM
 from logisticRegression import LogisticRegression
 
-classifierType = LogisticRegression #RandomForest #GridSearchSVM #AdaBoost #NaiveBayes #SVM #
+classifierType = LogisticRegression #RandomForest #AdaBoost #SVM #GridSearchSVM #NaiveBayes #
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
-
-if 0:
-    count = collections.defaultdict(int)
-    for dataPoint in data:
-        dp = DataPoint(dataPoint)
-        count[' '.join(dp.getAltlex())] += 1
-
-    for s in sorted(count, key=count.get):
-        print(s, count[s])
-    exit()
-
-#list of features
-#curr stem ngrams
-#prev stem ngrams
-#altlex marker
-#reporting verbs
-#final reporting
-#coref
-#altlex length
-#altlex pos ngrams
-#cosine (maybe)
 
 #first create dataset and assign features
 fe = FeatureExtractor()
@@ -93,21 +73,7 @@ for settingValues in itertools.product((True,False),
     print("True points: {} False points: {}".format(len(causalSet),
                                                     len(nonCausalSet)))
 
-#now set aside at least 150 causal examples for testing or 30%, whichever is greater
-    numCausalTesting = int(max(150, len(causalSet)*.3))
-    numCausalTraining = len(causalSet) - numCausalTesting
-    proportion = numCausalTesting/len(causalSet)
-    numNonCausalTraining = int((1-proportion) * len(nonCausalSet))
-    #oversamplingRatio = int(numNonCausalTraining/numCausalTraining)
-    #numNonCausalTraining = numCausalTraining * oversamplingRatio
-    #numNonCausalTesting = len(nonCausalSet)-numNonCausalTraining
-
-#now set aside 30% for testing and oversample the causal training data to be balanced
-    training = nonCausalSet[:numNonCausalTraining] + \
-               causalSet[:numCausalTraining] #* oversamplingRatio
-    testing = nonCausalSet[numNonCausalTraining:] + \
-              causalSet[numCausalTraining:]
-
+    training,testing = splitData(causalSet, nonCausalSet)
     #print(numCausalTesting, numCausalTraining, proportion, oversamplingRatio, numNonCausalTraining, numNonCausalTesting)
     #print(len(training), numNonCausalTraining/len(training),
     #      len(testing), numNonCausalTesting/len(testing))
@@ -116,42 +82,14 @@ for settingValues in itertools.product((True,False),
 
     if True:
         classifier.crossvalidate(training)
-        classifier.show_most_informative_features(50)
-        continue
-    
-    classifier.train(training)
-    
-    refsets = collections.defaultdict(set)
-    testsets = collections.defaultdict(set)
-    truepos = 0
-    trueneg = 0
-    falsepos = 0
-    falseneg = 0
+    else:
+        classifier.train(training)
 
-    labels = set()
-    for i, (feats, label) in enumerate(testing):
-        refsets[label].add(i)
-        observed = classifier.classify(feats)
-        testsets[observed].add(i)
-        labels.add(label)
-        if observed == label:
-            if label == True:
-                truepos += 1
-            else:
-                trueneg += 1
-        elif label == False:
-            falsepos +=1
-        else:
-            falseneg += 1
-        
-    for label in labels:
-        print ('{} precision:'.format(label), nltk.metrics.precision(refsets[label], testsets[label]))
-        print ('{} recall:'.format(label), nltk.metrics.recall(refsets[label], testsets[label]))
-        print ('{} F-measure:'.format(label), nltk.metrics.f_measure(refsets[label], testsets[label]))
-
-    print(truepos, trueneg, falsepos, falseneg)
-    print(classifier.accuracy(testing))
-    
     classifier.show_most_informative_features(50)
+    continue
+
+    accuracy = classifier.accuracy(testing)
+    precision, recall = classifier.metrics(testing)
+    classifier.printResults(accuracy, precision, recall)
 
 classifier.save("model")
