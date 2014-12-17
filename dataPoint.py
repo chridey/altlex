@@ -9,6 +9,9 @@ class DataPoint:
     def __hash__(self):
         return ' '.join(self.getPrevWords() + self.getCurrWords()).__hash__()
 
+    def getTag(self):
+        return self._dataDict['tag']
+
     @property
     def altlexLength(self):
         return self._dataDict['altlexLength']
@@ -18,6 +21,13 @@ class DataPoint:
             return self.getCurrWords()[:self.altlexLength]
         else:
             return None
+
+    def matchAltlex(self, phrase):
+        a = self.getAltlex()
+        if a is None:
+            return False
+        if a == phrase.split():
+            return True        
 
     def getAltlexLemmatized(self):
         if self.altlexLength > 0:
