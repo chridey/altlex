@@ -6,10 +6,10 @@ from svm import SVM
 class GridSearchSVM(SVM):
     def __init__(self):
         super().__init__()
-        svc = SVC(verbose=True)
-        self.parameters = {'C': (.01, .1, 1, 10),
-                           'gamma': (.01, .1, 1, 10)}
-        self.classifier = GridSearchCV(svc, self.parameters)
+        svc = SVC()#(verbose=True)
+        self.parameters = {'C': (.01, .1, 1, 10, 100),
+                           'gamma': (0, .0001, .001, .005, .01, .1, 1)}
+        self.classifier = GridSearchCV(svc, self.parameters, scoring='f1')
 
     def train(self, features, transform=True):
         super().train(features, transform)

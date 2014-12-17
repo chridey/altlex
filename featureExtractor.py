@@ -7,8 +7,9 @@ from nltk.corpus import wordnet  as wn
 from nltk.stem import SnowballStemmer
 
 from extractSentences import CausalityScorer,MarkerScorer
-from treeUtils import extractRightSiblings, extractSelfCategory, extractParentCategory
+from treeUtils import extractRightSiblings, extractSelfParse, extractSelfCategory, extractParentCategory
 from wordNetManager import WordNetManager
+from verbNetManager import VerbNetManager
 
 def wordnet_distance(word1, word2):
     maxy = 0
@@ -38,6 +39,7 @@ class FeatureExtractor:
         self.cs = None
         self.ms = None
         self.wn = WordNetManager()
+        self.vn = VerbNetManager()
         self.reporting = set(wn.synsets('say', pos=wn.VERB))
         self.framenetScores = {'nn' : None,
                                'vb' : None,
@@ -49,6 +51,8 @@ class FeatureExtractor:
                               'prev_stem' : self.getPrevStemNgrams,
                               'reporting' : self.getReporting,
                               'final_reporting' : self.getFinalReporting,
+                              'final_time' : self.getFinalTime,
+                              'final_example' : self.getFinalExample,
                               'noun_similarity' : self.getNounSimilarity,
                               'coref' : self.getCoref,
                               'head_verb_altlex' : self.getHeadVerbCatAltlex,
@@ -57,6 +61,12 @@ class FeatureExtractor:
                               'noun_cat_altlex' : self.getNounCatAltlex,
                               'noun_cat_curr' : self.getNounCatCurr,
                               'noun_cat_prev' : self.getNounCatPrev,
+                              'verbnet_class_altlex' : self.getVerbNetClassesAltlex,
+                              'verbnet_class_curr' : self.getVerbNetClassesCurrent,
+                              'verbnet_class_prev' : self.getVerbNetClassesPrevious,
+                              'theme_role_altlex' : self.getThematicRolesAltlex,
+                              'theme_role_curr' : self.getThematicRolesCurrent,
+                              'theme_role_prev' : self.getThematicRolesPrevious,
                               'has_copula' : self.getCopula,
                               #'pronoun' : self.getPronoun,
                               'intersection' : self.getIntersection,
@@ -72,6 +82,7 @@ class FeatureExtractor:
                               'self_category' : self.getSelfCategory,
                               'parent_category' : self.getParentCategory,
                               'productions' : self.getProductionRules,
+                              'altlex_productions' : self.getAltlexProductionRules,
                               }
 
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
@@ -105,7 +116,9 @@ class FeatureExtractor:
 
             #semantic
             'final_reporting' : True,
-            'reporting' : False, #inconclusive
+            'final_time' : True,
+            'final_example' : False,
+            'reporting' : False, #inconclusive, mod final reporting may capture
             'head_verb_altlex' : True,
             'head_verb_curr' : True,
             'head_verb_prev' : True,
@@ -113,6 +126,12 @@ class FeatureExtractor:
             'noun_cat_curr' : False, #seems to hurt
             'noun_cat_prev' : False, #seems to hurt
             'noun_similarity' : False, #inconclusive
+            'verbnet_class_prev' : True,
+            'verbnet_class_curr' : True, #both seem to help
+            'verbnet_class_altlex' : False,
+            'theme_role_altlex' : False,
+            'theme_role_curr' : False,
+            'theme_role_prev' : False, #helps for LR but not RF but why??
             'framenet' : True,
 
             #syntactic
@@ -121,6 +140,7 @@ class FeatureExtractor:
             'self_category' : True, #seems to help
             'parent_category' : False, #doesnt help
             'productions' : False, #seems to overtrain
+            'altlex_productions' : False, #inconclusive, but seems worse
             }
 
     def getNgrams(self, featureName, gramList, n=(1,2)):
@@ -233,7 +253,20 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getFinalReporting(self, dataPoint):
         return {self.functionFeatures[self.getFinalReporting] :
-                wordnet_distance("say",
+                max(wordnet_distance("say",
+                                     lemma)
+                    for lemma in dataPoint.getAltlexLemmatized())}
+
+    @lru_cache(maxsize=None)
+    def getFinalTime(self, dataPoint):
+        return {self.functionFeatures[self.getFinalTime] :
+                wordnet_distance("time",
+                                 dataPoint.getAltlexLemmatized()[-1])}
+
+    @lru_cache(maxsize=None)
+    def getFinalExample(self, dataPoint):
+        return {self.functionFeatures[self.getFinalExample] :
+                wordnet_distance("example",
                                  dataPoint.getAltlexLemmatized()[-1])}
 
     #wordnet similarity between all nouns in altlex and prev sentence
@@ -430,6 +463,17 @@ class FeatureExtractor:
         return {self.functionFeatures[self.getProductionRules] + str(s) :
                 True for s in tree.productions() if s.is_nonlexical()}
 
+    @lru_cache(maxsize=None)
+    def getAltlexProductionRules(self, dataPoint):
+        altlexTree = extractSelfParse(dataPoint.getAltlex(),
+                                      dataPoint.getCurrParse())
+        if altlexTree is None:
+            return {self.functionFeatures[self.getAltlexProductionRules] + ' None' :
+                    True}
+        else:
+            return {self.functionFeatures[self.getAltlexProductionRules] + str(s) :
+                    True for s in altlexTree.productions() if s.is_nonlexical()}
+        
     #consider other things to do with siblings
     #use only the immediate right sibling, unless it is a punctuation or modifying phrase
     #print all the patterns of altlexes that we see (could use for bootstrapping)
@@ -462,7 +506,68 @@ class FeatureExtractor:
 
         return {self.functionFeatures[self.getParentCategory] + str(cat) :
                 True}
+
+    def _getVerbNetClasses(self, dataPoint, part, name):
+        features = {}
+        prevVerbs = dataPoint.getStemsForPos('V', part, 'lemmas')
+
+        for verb in prevVerbs:
+            for verbClass in self.vn.getClasses(verb):
+                features[name + verbClass] = True
+
+        if not len(features):
+            features[name + 'None'] = True
+            
+        return features
+
+    @lru_cache(maxsize=None)
+    def getVerbNetClassesPrevious(self, dataPoint):
+        return self._getVerbNetClasses(dataPoint,
+                                       'previous',
+                                       self.functionFeatures[self.getVerbNetClassesPrevious])
         
+    @lru_cache(maxsize=None)
+    def getVerbNetClassesCurrent(self, dataPoint):
+        return self._getVerbNetClasses(dataPoint,
+                                       'current',
+                                       self.functionFeatures[self.getVerbNetClassesCurrent])
+
+    @lru_cache(maxsize=None)
+    def getVerbNetClassesAltlex(self, dataPoint):
+        return self._getVerbNetClasses(dataPoint,
+                                       'altlex',
+                                       self.functionFeatures[self.getVerbNetClassesAltlex])    
+
+    def _getThematicRoles(self, dataPoint, part, name):
+        features = {}
+        prevVerbs = dataPoint.getStemsForPos('V', part, 'lemmas')
+
+        for verb in prevVerbs:
+            for thematicRole in self.vn.getThematicRoles(verb):
+                features[name + thematicRole] = True
+
+        if not len(features):
+            features[name + 'None'] = True
+            
+        return features
+
+    @lru_cache(maxsize=None)
+    def getThematicRolesPrevious(self, dataPoint):
+        return self._getThematicRoles(dataPoint,
+                                       'previous',
+                                       self.functionFeatures[self.getThematicRolesPrevious])
+        
+    @lru_cache(maxsize=None)
+    def getThematicRolesCurrent(self, dataPoint):
+        return self._getThematicRoles(dataPoint,
+                                       'current',
+                                       self.functionFeatures[self.getThematicRolesCurrent])
+
+    @lru_cache(maxsize=None)
+    def getThematicRolesAltlex(self, dataPoint):
+        return self._getThematicRoles(dataPoint,
+                                       'altlex',
+                                       self.functionFeatures[self.getThematicRolesAltlex])    
 
     def addFeatures(self, dataPoint, featureSettings):
         '''add features for the given dataPoint according to which are
@@ -475,6 +580,6 @@ class FeatureExtractor:
                 features.update(self.validFeatures[featureName](dataPoint))
         return features
 
-
 #verbnet features?
 #lexpar features?
+#adverbs are useful discourse relations but what resources are there for them?
