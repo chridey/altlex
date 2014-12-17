@@ -8,6 +8,7 @@ class SVM(Sklearner):
         self.classifier = SVC(verbose=True,
                               #kernel='linear',
                               C=10)
+
         self.scaler = preprocessing.MinMaxScaler()
         
     def _transform(self, features):

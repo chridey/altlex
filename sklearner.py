@@ -103,20 +103,8 @@ class Sklearner:
             precisions.append(precision)
             recalls.append(recall)
 
-        precision = sum(precisions)/n_folds
-        recall = sum(recalls)/n_folds
-        print('''
-              Accuracy: {}
-              True precision: {}
-              True recall: {}
-              True F-measure: {}
-              '''.format(
-                  sum(accuracy)/n_folds,
-                  precision,
-                  recall,
-                  2 * precision * recall / (precision+recall)
-                  ))
-            
+        self.printResults(accuracy, precisions, recalls)
+        
         #train the final classifier on all the data
         #need to oversample again
         return self.train(zip(X, y), False)
@@ -148,7 +136,42 @@ class Sklearner:
 
         print(truepos, trueneg, falsepos, falseneg)
 
-        return truepos/(truepos+falsepos), truepos/(truepos+falseneg)
+        try:
+            precision = truepos/(truepos+falsepos)
+        except ZeroDivisionError:
+            precision = float('nan')
+
+        try:
+            recall = truepos/(truepos+falseneg)
+        except ZeroDivisionError:
+            recall = float('nan')
+
+        return precision, recall
+
+    def printResults(self, accuracy, precision, recall): #handle=sys.stdout
+        if type(accuracy) == list:
+            n_folds = len(accuracy)
+            accuracy = sum(accuracy)
+            precision = sum(precision)
+            recall = sum(recall)
+        else:
+            n_folds = 1
+
+        accuracy /= n_folds
+        precision /= n_folds
+        recall /= n_folds
+        
+        print('''
+              Accuracy: {}
+              True precision: {}
+              True recall: {}
+              True F-measure: {}
+              '''.format(
+                  accuracy,
+                  precision,
+                  recall,
+                  2 * precision * recall / (precision+recall)
+                  ))
             
     def classify(self, features, transform=True):
         if transform:
