@@ -76,12 +76,27 @@ class Sklearner:
             
         return data
 
+    def iterFolds(self, data, n_folds=2, random_state=1):
+        features, y = zip(*data)
+        skf = StratifiedKFold(y,
+                              n_folds,
+                              random_state)
+
+        for train_index,test_index in skf:
+            train = indexedSubset(data, set(train_index))
+            balancedData = self.balance(train)
+
+            test = indexedSubset(data, set(test_index))
+
+            yield balancedData, test
+
     def crossvalidate(self, training, n_folds=2):
         features, y = zip(*training)
         X = self._transform(features)
         skf = StratifiedKFold(y,
                               n_folds=n_folds,
                               random_state=1) #make sure we always use same data
+    
         accuracy = []
         precisions = []
         recalls = []
@@ -92,6 +107,7 @@ class Sklearner:
 
             #need to oversample here
             balancedData = self.balance(zip(X_train, y_train))
+
             clf = self.train(balancedData, False)
             
             tei = set(test_index)

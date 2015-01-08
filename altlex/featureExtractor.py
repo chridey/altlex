@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from collections import defaultdict
 
@@ -6,6 +7,7 @@ from nltk.corpus import wordnet  as wn
 #from nltk.corpus import stopwords
 from nltk.stem import SnowballStemmer
 
+from chnlp.altlex.dataPoint import DataPoint
 from chnlp.altlex.extractSentences import CausalityScorer,MarkerScorer
 from chnlp.utils.treeUtils import extractRightSiblings, extractSelfParse, extractSelfCategory, extractParentCategory
 from chnlp.semantics.wordNetManager import WordNetManager
@@ -30,11 +32,30 @@ def wordnet_distance(word1, word2):
 
     return maxy
 
+def makeDataset(data, featureExtractor, featureSettings):
+    
+    causalSet = []
+    nonCausalSet = []
+
+    for dataPoint in data:
+        #add pair of features dictionary and True or False
+        dp = DataPoint(dataPoint)
+    
+        features = featureExtractor.addFeatures(dp, featureSettings)
+
+        if dataPoint['tag'] == 'causal':
+            causalSet.append((features, True))
+        else:
+            nonCausalSet.append((features, False))
+
+    return causalSet, nonCausalSet
+
 class FeatureExtractor:
     sn = SnowballStemmer('english')
+    configPath = os.path.join(os.path.join(os.path.dirname(__file__), '..'), 'config')
     
     def __init__(self):
-        with open('/home/chidey/PDTB/Discourse/config/markers/markers') as f:
+        with open(os.path.join(FeatureExtractor.configPath, 'markers')) as f:
             self.markers = f.read().splitlines()
         self.cs = None
         self.ms = None
@@ -87,13 +108,6 @@ class FeatureExtractor:
                               }
 
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
-
-    @property
-    def experimentalSettings(self):
-        return {
-            #'pronoun' , #not tested
-            #'tense', #doesnt help
-        }
 
     @property
     def defaultSettings(self):
@@ -432,7 +446,8 @@ class FeatureExtractor:
         for pos in self.framenetScores:
             if self.framenetScores[pos] is None:
                 self.framenetScores[pos] = {}
-                with open('/home/chidey/PDTB/' + pos) as f:
+                with open(os.path.join(os.path.join(FeatureExtractor.configPath,
+                                                    'framenet'), pos)) as f:
                     for line in f:
                         p,word,count1,count2,score = line.split()
                         score = float(score)

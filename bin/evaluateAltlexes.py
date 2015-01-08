@@ -5,91 +5,81 @@
 
 import sys
 import json
+import argparse
 import collections
 import itertools
 
-import nltk
-
 from chnlp.utils.utils import splitData
-from chnlp.altlex.featureExtractor import FeatureExtractor
-from chnlp.altlex.dataPoint import DataPoint
-from chnlp.ml.randomForest import RandomForest
-from chnlp.ml.naiveBayes import NaiveBayes
-from chnlp.ml.adaBoost import AdaBoost
-from chnlp.ml.svm import SVM
-from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit
-from chnlp.ml.logisticRegression import LogisticRegression
+from chnlp.altlex.featureExtractor import makeDataset
+from chnlp.altlex.config import Config
 
-classifierType = LogisticRegression #RandomForest #GridSearchLogit #AdaBoost #SVM #GridSearchSVM #NaiveBayes #
+config = Config()
 
-with open(sys.argv[1]) as f:
+parser = argparse.ArgumentParser(description='train and/or evaluate a classifier on a dataset with altlexes')
+
+parser.add_argument('infile', 
+                    help='the file containing the sentences and metadata in JSON format')
+parser.add_argument('--classifier', '-c', metavar='C',
+                    choices = config.classifiers.keys(),
+                    default = config.classifier,
+                    help = 'the supervised learner to use (default: %(default)s) (choices: %(choices)s')
+
+parser.add_argument('--crossvalidate', '-v', action='store_true',
+                    help = 'crossvalidate and print the results (default: train only)')
+
+parser.add_argument('--test', '-t', action='store_true',
+                    help = 'test on the set aside data (default: train only)')
+
+parser.add_argument('--save', metavar = 'S',
+                    help = 'save the model to a file named S')
+
+parser.add_argument('--config',
+                    help = 'JSON config file to use instead of command line options')
+
+args = parser.parse_args()
+
+if args.config:
+    config.setParams(json.load(args.config))
+
+classifierType = config.classifiers[args.classifier]
+
+with open(args.infile) as f:
     data = json.load(f)
 
 #first create dataset and assign features
-fe = FeatureExtractor()
-settingKeys = list(fe.experimentalSettings)
+settingKeys = list(config.experimentalSettings)
 
 for settingValues in itertools.product((True,False),
                                        repeat=len(settingKeys)):
-    featureSettings = fe.defaultSettings.copy()
+    featureSettings = config.fixedSettings.copy()
     featureSettings.update(dict(zip(settingKeys, settingValues)))
         
     print(featureSettings)
 
-    causalSet = []
-    nonCausalSet = []
-
-    for dataPoint in data:
-        #add pair of features dictionary and True or False
-        dp = DataPoint(dataPoint)
-    
-        features = fe.addFeatures(dp, featureSettings)
-
-    #if 'said' in lemmatizedAltlex or 'say' in lemmatizedAltlex or 'says' in lemmatizedAltlex:
-    #    features['reporting'] = True
-
-    #what about if the ONLY verb it contains is a reporting verb?
-    #get list of verbs
-
-    #what about length of altlex
-
-    #features.update({"pronoun": "it" in altlex})
-
-    #features.update({"firstsibling" + pos[len(altlex)]: True})
-
-    #weirdly, these make things worse
-    #features.update(getNgrams('pos1', dataPoint['sentences'][1]['pos']))
-    #features.update(getNgrams('pos2', pos))
-
-    #how about first verb of altlex
-    #also add parts of speech for altlex
-    #doesnt help
-
-        if dataPoint['tag'] == 'causal':
-            causalSet.append((features, True))
-        else:
-            nonCausalSet.append((features, False))
+    causalSet, nonCausalSet = makeDataset(data,
+                                          config.featureExtractor,
+                                          featureSettings)
 
     print("True points: {} False points: {}".format(len(causalSet),
                                                     len(nonCausalSet)))
 
     training,testing = splitData(causalSet, nonCausalSet)
-    #print(numCausalTesting, numCausalTraining, proportion, oversamplingRatio, numNonCausalTraining, numNonCausalTesting)
     #print(len(training), numNonCausalTraining/len(training),
     #      len(testing), numNonCausalTesting/len(testing))
 
     classifier = classifierType()
 
-    if True:
+    if args.crossvalidate:
         classifier.crossvalidate(training)
     else:
         classifier.train(training)
 
     classifier.show_most_informative_features(50)
-    continue
 
-    accuracy = classifier.accuracy(testing)
-    precision, recall = classifier.metrics(testing)
-    classifier.printResults(accuracy, precision, recall)
+    if args.test:
+        accuracy = classifier.accuracy(testing)
+        precision, recall = classifier.metrics(testing)
+        classifier.printResults(accuracy, precision, recall)
 
-classifier.save("model")
+if args.save:
+    classifier.save(args.save)

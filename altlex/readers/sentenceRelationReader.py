@@ -1,7 +1,5 @@
 from chnlp.utils.readers.sentenceReader import Sentence, SentenceReader
 
-DEBUG = 0
-
 class SentenceRelation(Sentence):
     def __init__(self, tag=None, **kwargs):
         super().__init__(**kwargs)

@@ -8,6 +8,8 @@ import nltk
 #really need to aggregate these somehow though
 #try NER
 
+DEBUG = 0
+
 def extractAltlex(parse, found=False, preceding='', current=''):
     #need way of breaking out of recursion and returning result
     if parse is None or type(parse) == str:
