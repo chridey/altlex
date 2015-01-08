@@ -4,7 +4,7 @@ from sklearner import Sklearner
 class LogisticRegression(Sklearner):
     def __init__(self):
         super().__init__()
-        self.classifier = sklearn.linear_model.LogisticRegression()
+        self.classifier = sklearn.linear_model.LogisticRegression(C=.1)
 
     '''
     def train(self, training, transform=True):

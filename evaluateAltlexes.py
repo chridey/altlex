@@ -17,10 +17,10 @@ from randomForest import RandomForest
 from naiveBayes import NaiveBayes
 from adaBoost import AdaBoost
 from svm import SVM
-from gridSearchSVM import GridSearchSVM
+from gridSearch import GridSearchSVM, GridSearchLogit
 from logisticRegression import LogisticRegression
 
-classifierType = LogisticRegression #RandomForest #AdaBoost #SVM #GridSearchSVM #NaiveBayes #
+classifierType = LogisticRegression #RandomForest #GridSearchLogit #AdaBoost #SVM #GridSearchSVM #NaiveBayes #
 
 with open(sys.argv[1]) as f:
     data = json.load(f)

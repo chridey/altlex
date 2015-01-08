@@ -72,6 +72,7 @@ class FeatureExtractor:
                               'intersection' : self.getIntersection,
                               'noun_intersection' : self.getNounIntersection,
                               'altlex_pos' : self.getAltlexPosNgrams,
+                              'first_pos' : self.getFirstPos,
                               'altlex_marker' : self.getAltlexMarker,
                               'altlex_length': self.getAltlexLength,
                               'cosine' : self.getCosineSim,
@@ -136,6 +137,7 @@ class FeatureExtractor:
 
             #syntactic
             'altlex_pos': True,
+            'first_pos' : False,
             'right_siblings' : True,
             'self_category' : True, #seems to help
             'parent_category' : False, #doesnt help
@@ -204,6 +206,10 @@ class FeatureExtractor:
     def getAltlexPosNgrams(self, dataPoint):
         return self.getNgrams(self.functionFeatures[self.getAltlexPosNgrams],
                               dataPoint.getAltlexPos())
+
+    @lru_cache(maxsize=None)
+    def getFirstPos(self, dataPoint):
+        return {self.functionFeatures[self.getFirstPos] + dataPoint.getAltlexPos()[0] : True}
 
     @lru_cache(maxsize=None)
     def getAltlexMarker(self, dataPoint):

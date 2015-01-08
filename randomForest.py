@@ -4,7 +4,7 @@ from sklearner import Sklearner
 class RandomForest(Sklearner):
     def __init__(self):
         super().__init__()
-        self.classifier = RandomForestClassifier(n_estimators=100,
+        self.classifier = RandomForestClassifier(n_estimators=500,
                                                  #tried 10, 100, and 500
                                                  #higher number increases precision
                                                  n_jobs=1,
