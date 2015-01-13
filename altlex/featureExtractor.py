@@ -32,12 +32,15 @@ def wordnet_distance(word1, word2):
 
     return maxy
 
-def makeDataset(data, featureExtractor, featureSettings):
+def makeDataset(data, featureExtractor, featureSettings, max=float('inf')):
     
     causalSet = []
     nonCausalSet = []
 
-    for dataPoint in data:
+    for i,dataPoint in enumerate(data):
+        if i >= max:
+            break
+        
         #add pair of features dictionary and True or False
         dp = DataPoint(dataPoint)
     
@@ -110,12 +113,14 @@ class FeatureExtractor:
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
 
     @property
-    def defaultSettings(self):
+    def structuralFeatures(self):
         return {
-            #structural features
-            'altlex_length' : True,
+            'altlex_length' : True
+        }
 
-            #word
+    @property
+    def lexicalFeatures(self):
+        return {
             'coref' : True,
             'has_copula' : True, #seems to help
             'altlex_marker' : True,
@@ -128,8 +133,23 @@ class FeatureExtractor:
 
             'cosine' : False, #inconclusive
             'marker_cosine' : False, #inconclusive
+        }
 
-            #semantic
+    @property
+    def syntacticFeatures(self):
+        return {
+            'altlex_pos': True,
+            'first_pos' : False,
+            'right_siblings' : True,
+            'self_category' : True, #seems to help
+            'parent_category' : False, #doesnt help
+            'productions' : False, #seems to overtrain
+            'altlex_productions' : False, #inconclusive, but seems worse
+        }
+
+    @property
+    def semanticFeatures(self):
+        return {
             'final_reporting' : True,
             'final_time' : True,
             'final_example' : False,
@@ -148,17 +168,36 @@ class FeatureExtractor:
             'theme_role_curr' : False,
             'theme_role_prev' : False, #helps for LR but not RF but why??
             'framenet' : True,
+        }
 
-            #syntactic
-            'altlex_pos': True,
-            'first_pos' : False,
-            'right_siblings' : True,
-            'self_category' : True, #seems to help
-            'parent_category' : False, #doesnt help
-            'productions' : False, #seems to overtrain
-            'altlex_productions' : False, #inconclusive, but seems worse
-            }
+    @property
+    def defaultSettings(self):
+        #structural features
+        ret = self.structuralFeatures
 
+        #word
+        ret.update(self.lexicalFeatures)
+        
+        #syntactic
+        ret.update(self.syntacticFeatures)
+        
+        #semantic
+        ret.update(self.semanticFeatures)
+        
+        return ret
+
+    def featureSubsets(self, featureSubset):
+        if featureSubset == 'structural':
+            return self.structuralFeatures
+        elif featureSubset == 'lexical':
+            return self.lexicalFeatures
+        elif featureSubset == 'syntactic':
+            return self.syntacticFeatures
+        elif featureSubset == 'semantic':
+            return self.semanticFeatures
+        else:
+            raise NotImplementedError
+        
     def getNgrams(self, featureName, gramList, n=(1,2)):
         features = {}
         prev = None

@@ -3,10 +3,8 @@
 #oversample remaining causal examples
 #add features
 
-import sys
 import json
 import argparse
-import collections
 import itertools
 
 from chnlp.utils.utils import splitData
@@ -22,10 +20,12 @@ parser.add_argument('infile',
 parser.add_argument('--classifier', '-c', metavar='C',
                     choices = config.classifiers.keys(),
                     default = config.classifier,
-                    help = 'the supervised learner to use (default: %(default)s) (choices: %(choices)s')
+                    help = 'the supervised learner to use (default: %(default)s) (choices: %(choices)s)')
 
 parser.add_argument('--crossvalidate', '-v', action='store_true',
                     help = 'crossvalidate and print the results (default: train only)')
+parser.add_argument('--numFolds', type=int, default=2,
+                    help='the number of folds for crossvalidation (default: %(default)s)')
 
 parser.add_argument('--test', '-t', action='store_true',
                     help = 'test on the set aside data (default: train only)')
@@ -38,6 +38,7 @@ parser.add_argument('--config',
 
 args = parser.parse_args()
 
+#start with the config file options, but allow them to be overwritten by command line
 if args.config:
     config.setParams(json.load(args.config))
 
@@ -70,7 +71,7 @@ for settingValues in itertools.product((True,False),
     classifier = classifierType()
 
     if args.crossvalidate:
-        classifier.crossvalidate(training)
+        classifier.crossvalidate(training, n_folds=args.numFolds)
     else:
         classifier.train(training)
 

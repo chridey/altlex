@@ -66,3 +66,9 @@ class Config:
     @property
     def fixedSettings(self):
         return self.params['features']['fixed']
+
+    def featureSubset(self, *featureSubsets):
+        ret = {}
+        for featureSubset in featureSubsets:
+            ret.update(self.featureExtractor.featureSubsets(featureSubset))
+        return ret

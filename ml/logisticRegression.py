@@ -19,3 +19,14 @@ class LogisticRegression(Sklearner):
     @property
     def _feature_importances(self):
         return [abs(i) for i in self.model.coef_[0]]
+
+    def prob(self, features, transform=True):
+        if transform:
+            assert(type(features) == dict)
+            X = self._transform([features])
+        else:
+            X = features
+            
+        result = self.model.predict_proba(X)
+
+        return result[0]

@@ -79,8 +79,8 @@ class Sklearner:
     def iterFolds(self, data, n_folds=2, random_state=1):
         features, y = zip(*data)
         skf = StratifiedKFold(y,
-                              n_folds,
-                              random_state)
+                              n_folds=n_folds,
+                              random_state=random_state)
 
         for train_index,test_index in skf:
             train = indexedSubset(data, set(train_index))
@@ -176,7 +176,8 @@ class Sklearner:
         accuracy /= n_folds
         precision /= n_folds
         recall /= n_folds
-        
+
+        f_measure = 2 * precision * recall / (precision+recall)
         print('''
               Accuracy: {}
               True precision: {}
@@ -186,8 +187,10 @@ class Sklearner:
                   accuracy,
                   precision,
                   recall,
-                  2 * precision * recall / (precision+recall)
+                  f_measure
                   ))
+
+        return f_measure
             
     def classify(self, features, transform=True):
         if transform:
@@ -198,6 +201,9 @@ class Sklearner:
             
         result = self.model.predict(X)
         return result[0]
+
+    def prob(self, features, transform=True):
+        raise NotImplementedError
     
     def accuracy(self, testing, transform=True):
         X, Y = zip(*testing)
@@ -205,6 +211,10 @@ class Sklearner:
             X = self._transform(X)
         return self.model.score(X,Y)
 
+    @property
+    def numClasses(self):
+        return self.model.classes_
+    
     @property
     def _feature_importances(self):
         return self.model.feature_importances_

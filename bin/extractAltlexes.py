@@ -34,6 +34,9 @@ parser.add_argument('--gz', action='store_true',
 parser.add_argument('-t', '--timeout', metavar='T', type=float,
                     help='timeout after T seconds instead of reading entire file')
 
+parser.add_argument('-n', '--max', metavar='N', type=float,
+                    help='stop after collecting N datapoints')
+
 args = parser.parse_args()
 
 if args.outfile:
@@ -45,6 +48,11 @@ if args.timeout:
     timeout = args.timeout
 else:
     timeout = float('infinity')
+
+if args.max:
+    maxPoints = args.max
+else:
+    maxPoints = float('infinity')
 
 if args.altlexes:
     altlexes = readAltlexes(args.altlexes)
@@ -84,9 +92,11 @@ try:
 
             prevSentence = sentence
 
-            if time.time() - starttime > timeout:
+            if time.time() - starttime > timeout or len(data) > maxPoints:
                 raise Exception
 
 except Exception:
-    writeDataJSON(data, outfile)
+    pass
+
+writeDataJSON(data, outfile)
 
