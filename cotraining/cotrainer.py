@@ -2,6 +2,7 @@ import itertools
 import collections
 
 from chnlp.ml.sklearner import Sklearner
+from chnlp.utils.utils import indexedSubset
 
 class NotProbabilistic(Exception):
     pass
@@ -26,16 +27,21 @@ class Cotrainer(Sklearner):
         topNegative = sorted(queue[0], reverse=True)[:n]
         topPositive = sorted(queue[1], reverse=True)[:p]
 
+        print(topNegative, topPositive)
+        
         #now get the indices for each of these
         negativeIndices = set(*itertools.islice(zip(*topNegative),1,2))
         positiveIndices = set(*itertools.islice(zip(*topPositive),1,2))
 
-        remainingIndices = set(range(len(untaggedData)) - negativeIndices - positiveIndices
-        newData = indexedSubset(untaggedData, negativeIndices) + \
-                               indexedSubset(untaggedData, positiveIndices)
-        remainingData = indexedSubset(untaggedData, remainingIndices)
+        newTaggedData = list(indexedSubset(untaggedData, negativeIndices))
+        newPositives = list(zip(*indexedSubset(untaggedData, positiveIndices)))[0]
+        newTaggedData += list(zip(newPositives,
+                                  [True] * p))
+
+        remainingIndices = set(range(len(untaggedData))) - negativeIndices - positiveIndices
+        remainingUntaggedData = indexedSubset(untaggedData, remainingIndices)
             
-        return newData, remainingData
+        return newTaggedData, remainingUntaggedData
 
     def accuracy(self, testing, transform=True):
         raise NotImplementedError

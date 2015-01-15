@@ -1,13 +1,12 @@
-import itertools
 import collections
 import pickle
 
-import numpy
+#import numpy
 
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.externals import joblib
 
-from chnlp.utils.utils import indexedSubset
+from chnlp.utils.utils import indexedSubset, balance
 
 def load(filename):
     classifier = Sklearner()
@@ -53,43 +52,6 @@ class Sklearner:
         self.model = self.classifier.fit(X, Y)
         return self.model
 
-    def balance(self, data, oversample=True):
-        '''balancing for binary classification (labels must be T/F or 0/1)
-        default is oversampling, if set to false, we subsample
-        '''
-
-        #first count the number in each class
-        data = list(data)
-        total = len(data)
-        numTrue = sum(*itertools.islice(zip(*data),1,2))
-        numFalse = total - numTrue
-
-        if numFalse > numTrue:
-            if oversample:
-                oversamplingRatio = int(numFalse/numTrue)
-                numFalse = numTrue * oversamplingRatio
-                return list(filter(lambda x:x[1], data)) * oversamplingRatio + \
-                       list(itertools.filterfalse(lambda x:x[1], data))[:numFalse]
-            else:
-                return list(filter(lambda x:x[1], data)) + \
-                       list(itertools.filterfalse(lambda x:x[1], data))[:numTrue]
-            
-        return data
-
-    def iterFolds(self, data, n_folds=2, random_state=1):
-        features, y = zip(*data)
-        skf = StratifiedKFold(y,
-                              n_folds=n_folds,
-                              random_state=random_state)
-
-        for train_index,test_index in skf:
-            train = indexedSubset(data, set(train_index))
-            balancedData = self.balance(train)
-
-            test = indexedSubset(data, set(test_index))
-
-            yield balancedData, test
-
     def crossvalidate(self, training, n_folds=2):
         features, y = zip(*training)
         X = self._transform(features)
@@ -106,7 +68,7 @@ class Sklearner:
             y_train = indexedSubset(y, tri)
 
             #need to oversample here
-            balancedData = self.balance(zip(X_train, y_train))
+            balancedData = balance(zip(X_train, y_train))
 
             clf = self.train(balancedData, False)
             

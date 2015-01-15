@@ -6,9 +6,10 @@ import collections
 import matplotlib.pyplot as plt
 
 from chnlp.ml.cotrainer import Cotrainer, NotProbabilistic
-from chnlp.utils.utils import splitData, sampleDataWithoutReplacement
+from chnlp.utils.utils import splitData, sampleDataWithoutReplacement, iterFolds
 from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.altlex.config import Config
+from chnlp.cotraining.cotrainingDataHander import CotrainingDataHandler
 
 config = Config()
 
@@ -27,6 +28,9 @@ parser.add_argument('--negative', '-n', metavar='N', type=int, required=True,
 
 parser.add_argument('--unlabeled', '-u', metavar='U', type=int, default=75,
                     help='the number of unlabeled examples to sample at random (default: %(default)s) (P + N must be less than U)')
+
+parser.add_argument('--limit', '-l', metavar='L', type=float, default=float('inf'),
+                    help='the number of samples to keep in reserve (default: %(default)s)')
 
 parser.add_argument('--iterations', '-k', metavar='K', type=int, default=30,
                     help='the number of iterations (default: %(default)s)')
@@ -47,6 +51,8 @@ args = parser.parse_args()
 classifiers = [config.classifiers[args.classifier](),
                config.classifiers[args.classifier]()]
 cotrainer = Cotrainer(*classifiers)
+handler = CotrainingDataHandler(args.limit,
+                                args.unlabeled)
 
 #classifiers = [config.classifiers['random_forest'](),
 #               config.classifiers['svm']()]
@@ -57,12 +63,13 @@ with open(args.taggedFile) as f:
 with open(args.untaggedFile) as f:
     untaggedData = json.load(f)
 
-dataLookup = collections.defaultdict(dict)
 featureSubsets = (('semantic',),
                   ('syntactic', 'lexical', 'structural'))
 #featureSubsets = (('semantic', 'syntactic', 'lexical', 'structural'),
 #                  ('semantic', 'syntactic', 'lexical', 'structural'))
 
+
+dataLookup = collections.defaultdict(dict)
 #first create the metadata and split the datasets for the tagged data
 for index,featureSubset in enumerate(featureSubsets):
     causalSet, nonCausalSet = makeDataset(taggedData,
@@ -72,8 +79,8 @@ for index,featureSubset in enumerate(featureSubsets):
 
     #add these to some lookup table, blah blah
     dataLookup['tagged'][featureSubset] = []
-    for training, testing in classifiers[index].iterFolds(evaluation,
-                                                          n_folds=args.numFolds):
+    for training, testing in iterFolds(evaluation,
+                                       n_folds=args.numFolds):
 
         dataLookup['tagged'][featureSubset].append((training, testing))
 
@@ -82,11 +89,20 @@ for featureSubset in featureSubsets:
     emptySet, unknownSet = makeDataset(untaggedData,
                                        config.featureExtractor,
                                        config.featureSubset(*featureSubset),
-                                       #max=args.unlabeled
+                                       max=args.limit
                                        )
     #sample here
     startingData, remainingData = sampleDataWithoutReplacement(unknownSet, args.unlabeled)
-    dataLookup['untagged'][featureSubset] = startingData #,remainingData
+    dataLookup['untagged'][featureSubset] = startingData, remainingData
+
+'''
+handler.makeDataset(taggedData,
+                    untaggedData,
+                    args.numFolds,
+                    featureSubsets,
+                    makeDataset,
+                    config)
+'''
 
 #f_measures = {i: collections.defaultdict(list) for i in range(args.numFolds)}
 #accuracies = {i: collections.defaultdict(list) for i in range(args.numFolds)}
@@ -100,7 +116,15 @@ try:
         accuracies = collections.defaultdict(list)
         precisions = collections.defaultdict(list)
         recalls = collections.defaultdict(list)
-        
+
+        '''
+        for foldIndex, featureIndex in handler.iterData():
+            training = handler.taggedData('training', featureIndex, foldIndex)
+            testing = handler.taggedData('testing', featureIndex, foldIndex)
+            untaggedData = handler.untaggedData('cotraining', featureIndex)
+            remainingSample = handler.untaggedData('sampling', featureIndex)
+        '''
+            
         for j in range(args.numFolds):
             print('fold {}'.format(j))
 
@@ -109,37 +133,32 @@ try:
                 print('features {}'.format(featureSubset))
 
                 training = dataLookup['tagged'][featureSubset][j][0]
-                print('training is {}'.format(len(training)))
-                classifiers[k].train(training)
-
-                numPositives = 0
-                numNegatives = 0
-                index = 0
-                while numPositives < args.positive or numNegatives < args.negative:
-                    dataPoint = dataLookup['untagged'][featureSubset][index][0]
-                    label = classifiers[k].classify(dataPoint)
-
-                    append = False
-                    if label:
-                        if numPositives < args.positive:
-                            numPositives += 1
-                            append = True
-                    else:
-                        if numNegatives < args.negative:
-                            numNegatives += 1
-                            append = True
-
-                    if append:
-                        #print(dataPoint)
-                        #print(label)
-                        dataLookup['tagged'][featureSubset][j][0].append((dataPoint,
-                                                                       label))
-                    index +=1
-
-                dataLookup['untagged'][featureSubset] = \
-                                            dataLookup['untagged'][featureSubset][index:]
-
                 testing = dataLookup['tagged'][featureSubset][j][1]
+                untaggedData = dataLookup['untagged'][featureSubset][0]
+                remainingSample = dataLookup['untagged'][featureSubset][1]
+                print('training is {}'.format(len(training)))
+                print('testing is {}'.format(len(testing)))
+                print('untagged is {}'.format(len(untaggedData)))
+                print('remaining sample is {}'.format(len(remainingSample)))
+                      
+                newTaggedData, remainingUntaggedData = cotrainer.cotrain(k,
+                                                                         args.positive,
+                                                                         args.negative,
+                                                                         training,
+                                                                         untaggedData)
+
+                #add new tagged data to training
+                dataLookup['tagged'][featureSubset][j][0].extend(newTaggedData)
+
+                #replenish the points that were removed
+                newUntaggedData, remainingSample = \
+                             sampleDataWithoutReplacement(remainingSample,
+                                                          args.positive + args.negative)
+
+                #add these new points to the untagged data set
+                untaggedData = list(remainingUntaggedData) + newUntaggedData
+                dataLookup['untagged'][featureSubset] = untaggedData, remainingSample
+                                
                 accuracy = classifiers[k].accuracy(testing)
                 precision, recall = classifiers[k].metrics(testing)
 
@@ -183,8 +202,8 @@ try:
 #print(accuracies)
 except KeyboardInterrupt:
     print('Terminating on keyboard interrupt')
-except Exception as e:
-    print('Terminating on unknown exception {}'.format(e))
+#except Exception as e:
+ #   print('Terminating on unknown exception {}'.format(e))
 
 #plt.plot(range(len(f_measures[0][0])), f_measures[0][0], 'r',
 #         range(len(f_measures[0][1])), f_measures[0][1], 'g',

@@ -1,5 +1,10 @@
+'''functions for manipulating data sets'''
+
 import math
 import random
+import itertools
+
+from sklearn.cross_validation import StratifiedKFold
 
 def indexedSubset(x, i):
     '''takes in a list x and a collection of indices i and returns
@@ -40,3 +45,40 @@ def splitData(trueExamples, falseExamples, proportion=.3, min=150):
               trueExamples[numTrueTraining:]
 
     return training, testing
+
+def balance(data, oversample=True):
+    '''balancing for binary classification (labels must be T/F or 0/1)
+    default is oversampling, if set to false, we subsample
+    '''
+
+    #first count the number in each class
+    data = list(data)
+    total = len(data)
+    numTrue = sum(*itertools.islice(zip(*data),1,2))
+    numFalse = total - numTrue
+
+    if numFalse > numTrue:
+        if oversample:
+            oversamplingRatio = int(numFalse/numTrue)
+            numFalse = numTrue * oversamplingRatio
+            return list(filter(lambda x:x[1], data)) * oversamplingRatio + \
+                   list(itertools.filterfalse(lambda x:x[1], data))[:numFalse]
+        else:
+            return list(filter(lambda x:x[1], data)) + \
+                   list(itertools.filterfalse(lambda x:x[1], data))[:numTrue]
+
+    return data
+
+def iterFolds(data, n_folds=2, random_state=1):
+    features, y = zip(*data)
+    skf = StratifiedKFold(y,
+                          n_folds=n_folds,
+                          random_state=random_state)
+
+    for train_index,test_index in skf:
+        train = indexedSubset(data, set(train_index))
+        balancedData = balance(train)
+
+        test = indexedSubset(data, set(test_index))
+
+        yield balancedData, test
