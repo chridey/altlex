@@ -34,8 +34,7 @@ def wordnet_distance(word1, word2):
 
 def makeDataset(data, featureExtractor, featureSettings, max=float('inf')):
     
-    causalSet = []
-    nonCausalSet = []
+    taggedSet = []
 
     for i,dataPoint in enumerate(data):
         if i >= max:
@@ -47,11 +46,13 @@ def makeDataset(data, featureExtractor, featureSettings, max=float('inf')):
         features = featureExtractor.addFeatures(dp, featureSettings)
 
         if dataPoint['tag'] == 'causal':
-            causalSet.append((features, True))
+            taggedSet.append((features, True))
+        elif dataPoint['tag'] is None:
+            taggedSet.append((features, -1))
         else:
-            nonCausalSet.append((features, False))
+            taggedSet.append((features, False))
 
-    return causalSet, nonCausalSet
+    return taggedSet
 
 class FeatureExtractor:
     sn = SnowballStemmer('english')

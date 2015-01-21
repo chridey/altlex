@@ -52,9 +52,15 @@ class Sklearner:
         self.model = self.classifier.fit(X, Y)
         return self.model
 
-    def crossvalidate(self, training, n_folds=2):
-        features, y = zip(*training)
-        X = self._transform(features)
+    def crossvalidate(self, validation, n_folds=2, training=()):
+        features, y = zip(*validation)
+        if len(training):
+            tfeatures, ty = zip(*training)
+        else:
+            tfeatures = ()
+            ty = ()
+        X = self._transform(features + tfeatures)
+        tX = self._transform(tfeatures)
         skf = StratifiedKFold(y,
                               n_folds=n_folds,
                               random_state=1) #make sure we always use same data
@@ -64,8 +70,11 @@ class Sklearner:
         recalls = []
         for train_index,test_index in skf:
             tri = set(train_index)
-            X_train = indexedSubset(X, tri)
-            y_train = indexedSubset(y, tri)
+            X_train = indexedSubset(X, tri) #+ tX
+            #print(type(X_train)) #tuple
+            #print(type(tX)) #list
+            X_train += tuple(tX)
+            y_train = indexedSubset(y, tri) + ty
 
             #need to oversample here
             balancedData = balance(zip(X_train, y_train))

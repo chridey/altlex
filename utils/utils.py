@@ -9,7 +9,8 @@ from sklearn.cross_validation import StratifiedKFold
 def indexedSubset(x, i):
     '''takes in a list x and a collection of indices i and returns
     the values in x that are at those indices'''
-    
+
+    #do what numpy arrays do but with any collection
     return list(zip(*filter(lambda x: x[0] in i, enumerate(x))))[1]
 
 #sample data uniformly with replacement
@@ -28,8 +29,12 @@ def sampleDataWithoutReplacement(data, numSamples):
 
     return sample, indexedSubset(data, remainingIndices)
 
-def splitData(trueExamples, falseExamples, proportion=.3, min=150):
-    #now set aside at least 150 causal examples for testing or 30%, whichever is greater
+def splitData(data, proportion=.3, min=150):
+    #now set aside at least 150 examples for testing or 30%, whichever is greater
+
+    trueExamples = list(filter(lambda x:x[1], data))
+    falseExamples = list(itertools.filterfalse(lambda x:x[1], data))
+
     numTrueTesting = int(max(min, len(trueExamples)*proportion))
     numTrueTraining = len(trueExamples) - numTrueTesting
     proportion = numTrueTesting/len(trueExamples)

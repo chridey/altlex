@@ -1,7 +1,25 @@
 import json
-import collections
 
 from chnlp.utils.utils import splitData, sampleDataWithoutReplacement, iterFolds
+
+def zipDataForCotraining(data):
+    #data is currently
+    #[[[feats00,label0], [feats01,label1], ...],
+    #[[feats10,label0], [feats11,label1], ...]]
+    #need to convert this into
+    #[[[feats00,feats10],label0], [[feats01,feats11],label1], ...]
+
+    features1, labels1 = list(zip(*data[0]))
+    features2, labels2 = list(zip(*data[1]))
+    assert(labels1 == labels2)
+        
+    return list(zip(zip(features1,features2),labels1))
+
+def unzipDataForCotraining(data):
+    features, labels = zip(*data)
+    features1, features2 = zip(*features)
+    return (list(zip(features1, labels)),
+            list(zip(features2, labels)))
 
 class CotrainingDataHandler:
     def __init__(self,
@@ -29,34 +47,43 @@ class CotrainingDataHandler:
         self.numFolds = numFolds
         self.featureSubsets = featureSubsets
 
-        self.taggedData = collections.defaultdict(list)
-        self.untaggedData = {}
-        
+        self.taggedData = []
+        self.untaggedData = []
+
         #first create the metadata and split the datasets for the tagged data
-        for index,featureSubset in enumerate(featureSubsets):
-            positiveSet, negativeSet = makeDataset(taggedData,
-                                                   config.featureExtractor,
-                                                   config.featureSubset(*featureSubset))
-            evaluation, testing = splitData(positiveSet, negativeSet)
+        tmpTaggedData = []
+        tmpUntaggedData = []
+        for i,featureSubset in enumerate(featureSubsets):
+            setWithFeatures = makeDataset(taggedData,
+                                          config.featureExtractor,
+                                          config.featureSubset(*featureSubset))
+            tmpTaggedData.append(setWithFeatures)
+                
+            #now randomly get U examples from the untagged data
+            unknownSet = makeDataset(untaggedData,
+                                     config.featureExtractor,
+                                     config.featureSubset(*featureSubset),
+                                     max=self.untaggedLimit)
+            tmpUntaggedData.append(unknownSet)
 
-            #add these to some lookup table, blah blah
-            for training, testing in iterFolds(evaluation,
-                                               n_folds=self.numFolds):
-                self.taggedData[index].append({'training': training,
-                                               'testing': testing})
+        newTaggedData = zipDataForCotraining(tmpTaggedData)
+        evaluation, testing = splitData(newTaggedData)
 
-        #now randomly get U examples from the untagged data
-        for featureSubset in featureSubsets:
-            emptySet, unknownSet = makeDataset(untaggedData,
-                                               config.featureExtractor,
-                                               config.featureSubset(*featureSubset),
-                                               max=self.untaggedLimit)
-                                               
-            #sample here
-            startingData, remainingData = sampleDataWithoutReplacement(unknownSet,
-                                                                       self.untaggedSampleSize)
-            self.untaggedData[index] = {'cotraining': startingData,
-                                        'sampling': remainingData}
+        #add these to some lookup table, blah blah
+        for training, testing in iterFolds(evaluation,
+                                           n_folds=self.numFolds):
+            self.taggedData.append({'training': training,
+                                    'testing': testing})
+
+        newUntaggedData = zipDataForCotraining(tmpUntaggedData)
+        
+        #sample here
+        startingData, remainingData = sampleDataWithoutReplacement(newUntaggedData,
+                                                                   self.untaggedSampleSize)
+
+        for i in range(self.numFolds):
+            self.untaggedData.append({'cotraining': startingData,
+                                      'sampling': remainingData})
 
     def writeJSON(self, outfilename):
         #save num folds, feature subsets, tagged data, untagged data
@@ -64,8 +91,9 @@ class CotrainingDataHandler:
               'featureSubsets' : self.featureSubsets,
               'taggedData' : self.taggedData,
               'untaggedData' : self.untaggedData}
+
         with open(outfilename, 'w') as f:
-            json.dump(f, js)
+            json.dump(js, f)
             
     def loadJSON(self, infilename):
         with open(infilename) as f:
@@ -76,16 +104,36 @@ class CotrainingDataHandler:
         
     def iterData(self):
         for j in range(self.numFolds):
-            for k in range(len(self.featureSubsets)):
-                yield j,k
+            yield (self.taggedData[j]['training'],
+                   self.taggedData[j]['testing'])
 
-    def taggedData(self, dataType, featureIndex, foldIndex):
+    def getTaggedData(self, dataType, foldIndex):
         assert(dataType in self.taggedTypes)
         
-        return self.taggedData[featureIndex][foldIndex][dataType]
+        return self.taggedData[foldIndex][dataType]
 
-    def untaggedData(self, dataType, featureIndex):
-        assert(dataType in self.untaggedTypes)
+    def cotrainingData(self, foldIndex):
+        return self.untaggedData[foldIndex]['cotraining']
+
+    def samplingData(self, foldIndex):
+        return self.untaggedData[foldIndex]['sampling']
+
+    def updateTaggedData(self, newData, foldIndex):
+        self.taggedData[foldIndex]['training'] = newData
+
+    def updateUntaggedData(self,
+                           foldIndex,
+                           remainingUntaggedData,
+                           remainingSample,
+                           p,
+                           n):
+
+        newUntaggedData, remainingSample = \
+                         sampleDataWithoutReplacement(remainingSample,
+                                                      2*p + 2*n)
         
-        return self.untaggedData[featureIndex][dataType]
+        #add these new points to the untagged data set
+        untaggedData = list(remainingUntaggedData) + list(newUntaggedData)
 
+        self.untaggedData[foldIndex] = {'cotraining': untaggedData,
+                                        'sampling': remainingSample}

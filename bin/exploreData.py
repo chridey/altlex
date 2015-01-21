@@ -3,26 +3,20 @@ import json
 import collections
 
 from chnlp.utils.utils import splitData
-from chnlp.altlex.dataPoint import DataPoint
-from chnlp.altlex.featureExtractor import FeatureExtractor
+from chnlp.altlex.config import Config
+from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.ml.randomizedPCA import RandomizedPCA
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
 
-noncausal = []
-causal = []
-fe = FeatureExtractor()
-for dataPoint in data:
-    dp = DataPoint(dataPoint)
-    features = fe.addFeatures(dp, fe.defaultSettings)
-    
-    if dp.getTag() == 'causal':
-        causal.append((features,True))
-    else:
-        noncausal.append((features,False))
+config = Config()
+featureSettings = config.fixedSettings
+taggedData = makeDataset(data,
+                         config.featureExtractor,
+                         featureSettings)
 
-training, testing = splitData(causal, noncausal)
+training, testing = splitData(taggedData)
 
 rpca = RandomizedPCA()
 

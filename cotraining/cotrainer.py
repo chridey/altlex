@@ -3,48 +3,56 @@ import collections
 
 from chnlp.ml.sklearner import Sklearner
 from chnlp.utils.utils import indexedSubset
+from chnlp.cotraining.cotrainingDataHandler import unzipDataForCotraining
 
 class NotProbabilistic(Exception):
     pass
 
 class Cotrainer(Sklearner):
-    def __init__(self, classifier1, classifier2, **kwargs):
-        self.classifiers = [classifier1, classifier2]
+    def __init__(self, classifierType, **kwargs):
+        self.classifiers = [classifierType(), classifierType()]
         super().__init__(**kwargs)
 
-    #get the probabilities for all the data points and take the
+    #get the probabilities for all the data points and for each classifier  take the
     #p most confident positive points and n most confident negative points
-    def cotrain(self, classifierIndex, p, n, taggedData, untaggedData):
-        self.classifiers[classifierIndex].train(taggedData)
+    def train(self, taggedData, untaggedData, p, n):
+        for index in range(len(self.classifiers)):
+            unzippedTaggedData = unzipDataForCotraining(taggedData)
+            unzippedUntaggedData = unzipDataForCotraining(untaggedData)
 
-        queue = collections.defaultdict(list)
-        for i,datum in enumerate(untaggedData):
-            #datum is tuple of features,label
-            probs = self.classifiers[classifierIndex].prob(datum[0])
-            for k in range(len(probs)):
-                queue[k].append((probs[k], i))
+            self.classifiers[index].train(unzippedTaggedData[index])
 
-        topNegative = sorted(queue[0], reverse=True)[:n]
-        topPositive = sorted(queue[1], reverse=True)[:p]
+            queue = collections.defaultdict(list)
+            for i,datum in enumerate(unzippedUntaggedData[index]):
+                #datum is tuple of features,label
+                probs = self.classifiers[index].prob(datum[0])
+                for k in range(len(probs)):
+                    queue[k].append((probs[k], i))
 
-        print(topNegative, topPositive)
+            topNegative = sorted(queue[0], reverse=True)[:n]
+            topPositive = sorted(queue[1], reverse=True)[:p]
+
+            #print(topNegative, topPositive)
         
-        #now get the indices for each of these
-        negativeIndices = set(*itertools.islice(zip(*topNegative),1,2))
-        positiveIndices = set(*itertools.islice(zip(*topPositive),1,2))
+            #now get the indices for each of these
+            negativeIndices = set(*itertools.islice(zip(*topNegative),1,2))
+            positiveIndices = set(*itertools.islice(zip(*topPositive),1,2))
 
-        newTaggedData = list(indexedSubset(untaggedData, negativeIndices))
-        newPositives = list(zip(*indexedSubset(untaggedData, positiveIndices)))[0]
-        newTaggedData += list(zip(newPositives,
-                                  [True] * p))
+            #print(negativeIndices, positiveIndices)
+            newNegatives = list(zip(*indexedSubset(untaggedData, negativeIndices)))[0]
+            taggedData += list(zip(newNegatives, [False] * 2 * n))
+            newPositives = list(zip(*indexedSubset(untaggedData, positiveIndices)))[0]
+            taggedData += list(zip(newPositives,
+                                  [True] * 2 * p))
 
-        remainingIndices = set(range(len(untaggedData))) - negativeIndices - positiveIndices
-        remainingUntaggedData = indexedSubset(untaggedData, remainingIndices)
+            remainingIndices = set(range(len(untaggedData))) - negativeIndices - positiveIndices
+            untaggedData = indexedSubset(untaggedData, remainingIndices)
             
-        return newTaggedData, remainingUntaggedData
+        return taggedData, untaggedData
 
     def accuracy(self, testing, transform=True):
-        raise NotImplementedError
+        #TODO
+        return 0
 
     def classify(self, features, transform=True):
         #need to get the probability of each class for
@@ -64,13 +72,14 @@ class Cotrainer(Sklearner):
             
         return probs.index(max(probs))
 
+    '''
     def metrics(self, testing, transform=True):
         #testing is currently
         #[[[feats00,label0], [feats01,label1], ...],
         #[[feats10,label0], [feats11,label1], ...],
         #...]
         #need to convert this into
-        #[[[feats00,feats10,...],label0], [[feats01,feats11,...],label1], ...]
+        #[[[feats00,feats10],label0], [[feats01,feats11],label1], ...]
 
         features1 = list(*itertools.islice(zip(*testing[0]),0,1))
         features2 = list(*itertools.islice(zip(*testing[1]),0,1))
@@ -80,3 +89,4 @@ class Cotrainer(Sklearner):
         
         newTesting = list(zip(zip(features1,features2),labels1))
         return super().metrics(newTesting, transform)
+    '''

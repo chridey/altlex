@@ -27,6 +27,9 @@ parser.add_argument('--crossvalidate', '-v', action='store_true',
 parser.add_argument('--numFolds', type=int, default=2,
                     help='the number of folds for crossvalidation (default: %(default)s)')
 
+parser.add_argument('--unlabeled', '-u', metavar='U',
+                    help = 'use additional unlabeled data (requires that the classifier be a semi-supervised learning algorithm')
+
 parser.add_argument('--test', '-t', action='store_true',
                     help = 'test on the set aside data (default: train only)')
 
@@ -47,6 +50,14 @@ classifierType = config.classifiers[args.classifier]
 with open(args.infile) as f:
     data = json.load(f)
 
+if args.unlabeled:
+    assert(args.classifier in config.semisupervised)
+    
+    with open(args.unlabeled) as f:
+        untaggedData = json.load(f)
+else:
+    untaggedData = []
+    
 #first create dataset and assign features
 settingKeys = list(config.experimentalSettings)
 
@@ -57,23 +68,28 @@ for settingValues in itertools.product((True,False),
         
     print(featureSettings)
 
-    causalSet, nonCausalSet = makeDataset(data,
-                                          config.featureExtractor,
-                                          featureSettings)
+    taggedSet = makeDataset(data,
+                            config.featureExtractor,
+                            featureSettings)
 
-    print("True points: {} False points: {}".format(len(causalSet),
-                                                    len(nonCausalSet)))
+    training,testing = splitData(taggedSet)
 
-    training,testing = splitData(causalSet, nonCausalSet)
+    if len(untaggedData):
+        untaggedSet = makeDataset(untaggedData,
+                                  config.featureExtractor,
+                                  featureSettings)
+    else:
+        untaggedSet = []
+        
     #print(len(training), numNonCausalTraining/len(training),
     #      len(testing), numNonCausalTesting/len(testing))
 
     classifier = classifierType()
 
     if args.crossvalidate:
-        classifier.crossvalidate(training, n_folds=args.numFolds)
+        classifier.crossvalidate(training, n_folds=args.numFolds, training=untaggedSet)
     else:
-        classifier.train(training)
+        classifier.train(training + untaggedSet)
 
     classifier.show_most_informative_features(50)
 

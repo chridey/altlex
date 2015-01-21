@@ -1,15 +1,23 @@
+#train a classifier on semantic features
+#train a classifier on all the other features
+
+#use each of those classifiers to label the random data from the untagged data
+
+#add these examples to the training set
+#replenish the untagged data
+
 import json
 import argparse
 import collections
+import itertools
 
-#import matplotlib
-import matplotlib.pyplot as plt
+from chnlp.metrics.metricsAccumulator import MetricsAccumulator
 
-from chnlp.ml.cotrainer import Cotrainer, NotProbabilistic
-from chnlp.utils.utils import splitData, sampleDataWithoutReplacement, iterFolds
 from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.altlex.config import Config
-from chnlp.cotraining.cotrainingDataHander import CotrainingDataHandler
+
+from chnlp.cotraining.cotrainer import Cotrainer, NotProbabilistic
+from chnlp.cotraining.cotrainingDataHandler import CotrainingDataHandler, unzipDataForCotraining
 
 config = Config()
 
@@ -43,179 +51,121 @@ parser.add_argument('--classifier', '-c', metavar='C',
                     default = config.classifier,
                     help = 'the supervised learner to use (default: %(default)s) (choices: %(choices)s)')
 
+parser.add_argument('--dump', metavar = 'D',
+                    help = 'dump the processed features to a file named D')
+
+parser.add_argument('--load', metavar = 'L',
+                    help = 'load processed features from a file named L')
+
 parser.add_argument('--save', metavar = 'S',
                     help = 'save the model to a file named S')
 
 args = parser.parse_args()
 
-classifiers = [config.classifiers[args.classifier](),
-               config.classifiers[args.classifier]()]
-cotrainer = Cotrainer(*classifiers)
+cotrainer = Cotrainer(config.classifiers[args.classifier])
 handler = CotrainingDataHandler(args.limit,
                                 args.unlabeled)
+featureSubsets = (
+    #('semantic',),
+    ('syntactic', 'lexical', 'structural'),
+    ('semantic',),
+    )
+metrics = MetricsAccumulator(args.numFolds,
+                             list(featureSubsets) + ['combined'])
 
-#classifiers = [config.classifiers['random_forest'](),
-#               config.classifiers['svm']()]
+if args.load:
+    handler.loadJSON(args.load)
+else:
+    with open(args.taggedFile) as f:
+        taggedData = json.load(f)
 
-with open(args.taggedFile) as f:
-    taggedData = json.load(f)
+    with open(args.untaggedFile) as f:
+        untaggedData = json.load(f)
 
-with open(args.untaggedFile) as f:
-    untaggedData = json.load(f)
+    handler.makeDataset(taggedData,
+                        untaggedData,
+                        args.numFolds,
+                        featureSubsets,
+                        makeDataset,
+                        config)
 
-featureSubsets = (('semantic',),
-                  ('syntactic', 'lexical', 'structural'))
-#featureSubsets = (('semantic', 'syntactic', 'lexical', 'structural'),
-#                  ('semantic', 'syntactic', 'lexical', 'structural'))
-
-
-dataLookup = collections.defaultdict(dict)
-#first create the metadata and split the datasets for the tagged data
-for index,featureSubset in enumerate(featureSubsets):
-    causalSet, nonCausalSet = makeDataset(taggedData,
-                                          config.featureExtractor,
-                                          config.featureSubset(*featureSubset))
-    evaluation, testing = splitData(causalSet, nonCausalSet)
-
-    #add these to some lookup table, blah blah
-    dataLookup['tagged'][featureSubset] = []
-    for training, testing in iterFolds(evaluation,
-                                       n_folds=args.numFolds):
-
-        dataLookup['tagged'][featureSubset].append((training, testing))
-
-#now randomly get U examples from the untagged data
-for featureSubset in featureSubsets:
-    emptySet, unknownSet = makeDataset(untaggedData,
-                                       config.featureExtractor,
-                                       config.featureSubset(*featureSubset),
-                                       max=args.limit
-                                       )
-    #sample here
-    startingData, remainingData = sampleDataWithoutReplacement(unknownSet, args.unlabeled)
-    dataLookup['untagged'][featureSubset] = startingData, remainingData
-
-'''
-handler.makeDataset(taggedData,
-                    untaggedData,
-                    args.numFolds,
-                    featureSubsets,
-                    makeDataset,
-                    config)
-'''
-
-#f_measures = {i: collections.defaultdict(list) for i in range(args.numFolds)}
-#accuracies = {i: collections.defaultdict(list) for i in range(args.numFolds)}
-
-f_measures = collections.defaultdict(list)
+if args.dump:
+    handler.writeJSON(args.dump)
 
 try:
     for i in range(args.iterations):
         print('iteration {}'.format(i))
+        
+        combinedTesting = []
 
-        accuracies = collections.defaultdict(list)
-        precisions = collections.defaultdict(list)
-        recalls = collections.defaultdict(list)
-
-        '''
-        for foldIndex, featureIndex in handler.iterData():
-            training = handler.taggedData('training', featureIndex, foldIndex)
-            testing = handler.taggedData('testing', featureIndex, foldIndex)
-            untaggedData = handler.untaggedData('cotraining', featureIndex)
-            remainingSample = handler.untaggedData('sampling', featureIndex)
-        '''
-            
-        for j in range(args.numFolds):
-            print('fold {}'.format(j))
-
-            combinedTesting = []
-            for k,featureSubset in enumerate(featureSubsets):
-                print('features {}'.format(featureSubset))
-
-                training = dataLookup['tagged'][featureSubset][j][0]
-                testing = dataLookup['tagged'][featureSubset][j][1]
-                untaggedData = dataLookup['untagged'][featureSubset][0]
-                remainingSample = dataLookup['untagged'][featureSubset][1]
-                print('training is {}'.format(len(training)))
-                print('testing is {}'.format(len(testing)))
-                print('untagged is {}'.format(len(untaggedData)))
-                print('remaining sample is {}'.format(len(remainingSample)))
+        for foldIndex, (training, testing) in enumerate(handler.iterData()):
+            untaggedData = handler.cotrainingData(foldIndex)
+            remainingSample = handler.samplingData(foldIndex)
+        
+            print('training is {}'.format(len(training)))
+            print('testing is {}'.format(len(testing)))
+            print('untagged is {}'.format(len(untaggedData)))
+            print('remaining sample is {}'.format(len(remainingSample)))
                       
-                newTaggedData, remainingUntaggedData = cotrainer.cotrain(k,
-                                                                         args.positive,
-                                                                         args.negative,
-                                                                         training,
-                                                                         untaggedData)
+            newTaggedData, remainingUntaggedData = cotrainer.train(training,
+                                                                   untaggedData,
+                                                                   args.positive,
+                                                                   args.negative)
+            print(len(newTaggedData))
+            print(len(remainingUntaggedData))
+            
+            #add new tagged data to training
+            handler.updateTaggedData(newTaggedData, foldIndex)
 
-                #add new tagged data to training
-                dataLookup['tagged'][featureSubset][j][0].extend(newTaggedData)
+            #replenish the points that were removed
+            handler.updateUntaggedData(foldIndex,
+                                       remainingUntaggedData,
+                                       remainingSample,
+                                       args.positive,
+                                       args.negative)
 
-                #replenish the points that were removed
-                newUntaggedData, remainingSample = \
-                             sampleDataWithoutReplacement(remainingSample,
-                                                          args.positive + args.negative)
+            
+            newTesting = unzipDataForCotraining(testing)
+            for featureIndex in range(len(featureSubsets)):
+                
+                metrics.add(foldIndex,
+                            featureSubsets[featureIndex],
+                            cotrainer.classifiers[featureIndex],
+                            newTesting[featureIndex])
 
-                #add these new points to the untagged data set
-                untaggedData = list(remainingUntaggedData) + newUntaggedData
-                dataLookup['untagged'][featureSubset] = untaggedData, remainingSample
-                                
-                accuracy = classifiers[k].accuracy(testing)
-                precision, recall = classifiers[k].metrics(testing)
+            combinedTesting.append(testing)
 
-                accuracies[k].append(accuracy)
-                precisions[k].append(precision)
-                recalls[k].append(recall)
-                #f_measure = classifiers[k].printResults(accuracy, precision, recall)
-                #f_measures[j][k].append(f_measure)
-                #accuracies[j][k].append(accuracy)
-                combinedTesting.append(testing)
-
-            print('calculating combined metrics')
-            accuracy = 0 #TODO
             try:
-                precision,recall = cotrainer.metrics(combinedTesting)
+                metrics.add(foldIndex,
+                            'combined',
+                            cotrainer,
+                            testing)
             except NotProbabilistic as np:
                 continue
-            accuracies['overall'].append(accuracy)
-            precisions['overall'].append(precision)
-            recalls['overall'].append(recall)
 
-        f_measures['overall'].append(cotrainer.printResults(accuracies['overall'],
-                                                            precisions['overall'],
-                                                            recalls['overall']))
+        for featureIndex in range(len(featureSubsets)):
+            metrics.average(featureSubsets[featureIndex],
+                            i,
+                            cotrainer.classifiers[featureIndex])
 
-                                                            
-        for k in range(len(featureSubsets)):
-            f_measures[k].append(classifiers[k].printResults(accuracies[k],
-                                                             precisions[k],
-                                                             recalls[k]))
-
+        metrics.average('combined', i, cotrainer)
         
-    #train a classifier on semantic features
-    #train a classifier on all the other features
-
-    #use each of those classifiers to label the random data from the untagged data
-
-    #add these examples to the training set
-    #replenish the untagged data
 #print(f_measures)
 #print(accuracies)
 except KeyboardInterrupt:
     print('Terminating on keyboard interrupt')
-#except Exception as e:
- #   print('Terminating on unknown exception {}'.format(e))
+except Exception as e:
+    print('Terminating on unknown exception {}'.format(e))
 
 #plt.plot(range(len(f_measures[0][0])), f_measures[0][0], 'r',
 #         range(len(f_measures[0][1])), f_measures[0][1], 'g',
 #         range(len(f_measures[1][0])), f_measures[1][0], 'b',
 #         range(len(f_measures[1][1])), f_measures[1][1], 'y')
-plt.plot(range(len(f_measures[0])), f_measures[0], 'r',
-         range(len(f_measures[1])), f_measures[1], 'b',
-         range(len(f_measures['overall'])), f_measures['overall'], 'y',
-         )
 
-plt.savefig('cotrain_{}_{}_{}_{}_{}.png'.format(args.classifier,
-                                                args.positive,
-                                                args.negative,
-                                                args.unlabeled,
-                                                args.numFolds))
+print(metrics.f_measures)
+metrics.plotFmeasure()
+metrics.savePlot('cotrain_{}_{}_{}_{}_{}.png'.format(args.classifier,
+                                                     args.positive,
+                                                     args.negative,
+                                                     args.unlabeled,
+                                                     args.numFolds))

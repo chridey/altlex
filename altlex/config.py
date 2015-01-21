@@ -6,6 +6,8 @@ from chnlp.ml.logisticRegression import LogisticRegression
 
 from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit
 
+from chnlp.ml.labelSpreading import LabelSpreader
+
 from chnlp.altlex.featureExtractor import FeatureExtractor
 
 class Config:
@@ -36,7 +38,12 @@ class Config:
                 'svm': SVM,
                 'logistic_regression': LogisticRegression,
                 'grid_search_svm': GridSearchSVM,
-                'grid_search_logistic_regression': GridSearchLogit}
+                'grid_search_logistic_regression': GridSearchLogit,
+                'label_spreading': LabelSpreader}
+
+    @property
+    def semisupervised(self):
+        return {'label_spreading'}
 
     def validate(self, params):
         assert(type(params) == dict)
