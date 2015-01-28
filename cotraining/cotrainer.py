@@ -17,8 +17,8 @@ class Cotrainer(Sklearner):
     #p most confident positive points and n most confident negative points
     def train(self, taggedData, untaggedData, p, n):
         for index in range(len(self.classifiers)):
-            unzippedTaggedData = unzipDataForCotraining(taggedData)
-            unzippedUntaggedData = unzipDataForCotraining(untaggedData)
+            unzippedTaggedData = taggedData #unzipDataForCotraining(taggedData)
+            unzippedUntaggedData = untaggedData #unzipDataForCotraining(untaggedData)
 
             self.classifiers[index].train(unzippedTaggedData[index])
 
@@ -54,6 +54,9 @@ class Cotrainer(Sklearner):
         #TODO
         return 0
 
+    def metrics(self, testing, transform=True):
+        super().metrics(zipDataForCotraining(testing), transform)
+
     def classify(self, features, transform=True):
         #need to get the probability of each class for
         #each classifier and then determine which class prob is greatest
@@ -82,8 +85,11 @@ class SelfTrainer(Cotrainer):
 
         super(Cotrainer, self).__init__(**kwargs)
 
+    def metrics(self, testing, transform=True):
+        super(Cotrainer, self).metrics(testing[0], transform)
+        
     def classify(self, features, transform=True):
-        return self.model.classify(features[0], transform)
+        return self.classifiers[0].classify(features, transform)
                          
     '''
     def metrics(self, testing, transform=True):

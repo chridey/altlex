@@ -93,7 +93,8 @@ for settingValues in itertools.product((True,False),
         classifier.crossvalidate(training,
                                  n_folds=args.numFolds,
                                  training=untaggedSet,
-                                 balanced=args.balance)
+                                 balanced=args.balance,
+                                 printErrorAnalysis=True)
     else:
         classifier.train(training + untaggedSet)
 

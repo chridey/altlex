@@ -78,10 +78,11 @@ class CotrainingDataHandler:
         #add these to some lookup table, blah blah
         for training, testing in iterFolds(evaluation,
                                            n_folds=self.numFolds):
-            self.taggedData.append({'training': training,
-                                    'testing': testing})
+            self.taggedData.append({'training': unzipDataForCotraining(training),
+                                    'testing': unzipDataForCotraining(testing)})
 
-        newUntaggedData = zipDataForCotraining(tmpUntaggedData)
+        #newUntaggedData = zipDataForCotraining(tmpUntaggedData)
+        newUntaggedData = tmpUntaggedData
         
         #sample here
         if self.untaggedSampleSize < len(newUntaggedData):

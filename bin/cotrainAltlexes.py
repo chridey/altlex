@@ -136,14 +136,15 @@ try:
                                        args.negative)
 
             
-            newTesting = unzipDataForCotraining(testing)
+            #newTesting = unzipDataForCotraining(testing)
             for featureIndex in range(len(featureSubsets)):
                 
                 metrics.add(foldIndex,
                             featureSubsets[featureIndex],
                             cotrainer.classifiers[featureIndex],
-                            newTesting[featureIndex])
-
+                            #newTesting[featureIndex])
+                            testing[featureIndex])
+                
             combinedTesting.append(testing)
 
             try:

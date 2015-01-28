@@ -52,7 +52,13 @@ class Sklearner:
         self.model = self.classifier.fit(X, Y)
         return self.model
 
-    def crossvalidate(self, validation, n_folds=2, training=(), balanced=True):
+    def crossvalidate(self,
+                      validation,
+                      n_folds=2,
+                      training=(),
+                      balanced=True,
+                      printErrorAnalysis=False):
+        
         features, y = zip(*validation)
         if len(training):
             tfeatures, ty = zip(*training)
