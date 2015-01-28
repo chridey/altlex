@@ -40,10 +40,10 @@ class Cotrainer(Sklearner):
 
             #print(negativeIndices, positiveIndices)
             newNegatives = list(zip(*indexedSubset(untaggedData, negativeIndices)))[0]
-            taggedData += list(zip(newNegatives, [False] * 2 * n))
+            taggedData += list(zip(newNegatives, [False] * n))
             newPositives = list(zip(*indexedSubset(untaggedData, positiveIndices)))[0]
             taggedData += list(zip(newPositives,
-                                  [True] * 2 * p))
+                                  [True] * p))
 
             remainingIndices = set(range(len(untaggedData))) - negativeIndices - positiveIndices
             untaggedData = indexedSubset(untaggedData, remainingIndices)
@@ -72,6 +72,19 @@ class Cotrainer(Sklearner):
             
         return probs.index(max(probs))
 
+class SelfTrainer(Cotrainer):
+    def __init__(self, classifierType, classifierParams=None, **kwargs):
+        if classifierParams:
+            assert(type(classifierParams) == dict)
+            self.classifiers = [classifierType(**classifierParams)]
+        else:
+            self.classifiers = [classifierType()]
+
+        super(Cotrainer, self).__init__(**kwargs)
+
+    def classify(self, features, transform=True):
+        return self.model.classify(features[0], transform)
+                         
     '''
     def metrics(self, testing, transform=True):
         #testing is currently

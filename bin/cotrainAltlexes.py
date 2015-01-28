@@ -16,7 +16,7 @@ from chnlp.metrics.metricsAccumulator import MetricsAccumulator
 from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.altlex.config import Config
 
-from chnlp.cotraining.cotrainer import Cotrainer, NotProbabilistic
+from chnlp.cotraining.cotrainer import Cotrainer, SelfTrainer, NotProbabilistic
 from chnlp.cotraining.cotrainingDataHandler import CotrainingDataHandler, unzipDataForCotraining
 
 config = Config()
@@ -34,14 +34,14 @@ parser.add_argument('--positive', '-p', metavar='P', type=int, required=True,
 parser.add_argument('--negative', '-n', metavar='N', type=int, required=True,
                     help='the number of negative examples to sample from U_prime')
 
-parser.add_argument('--unlabeled', '-u', metavar='U', type=int, default=75,
-                    help='the number of unlabeled examples to sample at random (default: %(default)s) (P + N must be less than U)')
+parser.add_argument('--unlabeled', '-u', metavar='U', type=float, default=float('inf'),
+                    help='the number of unlabeled examples to sample at random (default: %(default)s) (use all the data) (P + N must be less than U)')
 
 parser.add_argument('--limit', '-l', metavar='L', type=float, default=float('inf'),
                     help='the number of samples to keep in reserve (default: %(default)s)')
 
-parser.add_argument('--iterations', '-k', metavar='K', type=int, default=30,
-                    help='the number of iterations (default: %(default)s)')
+parser.add_argument('--iterations', '-k', metavar='K', type=float, default=float('inf'),
+                    help='the number of iterations (default: %(default)s) (iterate until all data is tagged)')
 
 parser.add_argument('--numFolds', type=int, default=2,
                     help='the number of folds for crossvalidation (default: %(default)s)')
@@ -50,6 +50,9 @@ parser.add_argument('--classifier', '-c', metavar='C',
                     choices = config.classifiers.keys(),
                     default = config.classifier,
                     help = 'the supervised learner to use (default: %(default)s) (choices: %(choices)s)')
+
+parser.add_argument('--selftrain', '-s', action='store_true',
+                    help='do self-training instead of cotraining')                    
 
 parser.add_argument('--dump', metavar = 'D',
                     help = 'dump the processed features to a file named D')
@@ -62,14 +65,20 @@ parser.add_argument('--save', metavar = 'S',
 
 args = parser.parse_args()
 
-cotrainer = Cotrainer(config.classifiers[args.classifier])
 handler = CotrainingDataHandler(args.limit,
                                 args.unlabeled)
+
 featureSubsets = (
     #('semantic',),
     ('syntactic', 'lexical', 'structural'),
     ('semantic',),
     )
+if args.selftrain:
+    featureSubsets = tuple(itertools.chain(*featureSubsets)),
+    cotrainer = SelfTrainer(config.classifiers[args.classifier])
+else:
+    cotrainer = Cotrainer(config.classifiers[args.classifier])
+
 metrics = MetricsAccumulator(args.numFolds,
                              list(featureSubsets) + ['combined'])
 
@@ -93,7 +102,9 @@ if args.dump:
     handler.writeJSON(args.dump)
 
 try:
-    for i in range(args.iterations):
+    i = 0
+    while i < args.iterations:
+        
         print('iteration {}'.format(i))
         
         combinedTesting = []
@@ -149,13 +160,15 @@ try:
                             cotrainer.classifiers[featureIndex])
 
         metrics.average('combined', i, cotrainer)
+
+        i+=1
         
 #print(f_measures)
 #print(accuracies)
 except KeyboardInterrupt:
     print('Terminating on keyboard interrupt')
-except Exception as e:
-    print('Terminating on unknown exception {}'.format(e))
+#except Exception as e:
+#    print('Terminating on unknown exception {}'.format(e))
 
 #plt.plot(range(len(f_measures[0][0])), f_measures[0][0], 'r',
 #         range(len(f_measures[0][1])), f_measures[0][1], 'g',

@@ -1,7 +1,7 @@
 import collections
 import pickle
 
-#import numpy
+import numpy as np
 
 from sklearn.cross_validation import StratifiedKFold
 from sklearn.externals import joblib
@@ -52,7 +52,7 @@ class Sklearner:
         self.model = self.classifier.fit(X, Y)
         return self.model
 
-    def crossvalidate(self, validation, n_folds=2, training=()):
+    def crossvalidate(self, validation, n_folds=2, training=(), balanced=True):
         features, y = zip(*validation)
         if len(training):
             tfeatures, ty = zip(*training)
@@ -70,16 +70,20 @@ class Sklearner:
         recalls = []
         for train_index,test_index in skf:
             tri = set(train_index)
-            X_train = indexedSubset(X, tri) #+ tX
+            X_train = indexedSubset(X, tri)
             #print(type(X_train)) #tuple
             #print(type(tX)) #list
-            X_train += tuple(tX)
-            y_train = indexedSubset(y, tri) + ty
+            y_train = indexedSubset(y, tri)
 
             #need to oversample here
-            balancedData = balance(zip(X_train, y_train))
+            balancedData = list(zip(X_train, y_train))
+            if balanced:
+                balancedData = balance(balancedData)
 
-            clf = self.train(balancedData, False)
+            #now combine with any data that should always be in training
+            validationData = balancedData + list(zip(tX, ty))
+            
+            clf = self.train(validationData, False)
             
             tei = set(test_index)
             X_test = indexedSubset(X, tei)
@@ -97,21 +101,15 @@ class Sklearner:
         return self.train(zip(X, y), False)
 
     def metrics(self, testing, transform=True):
-        refsets = collections.defaultdict(set)
-        testsets = collections.defaultdict(set)
         truepos = 0
         trueneg = 0
         falsepos = 0
         falseneg = 0
 
-        labels = set()
         for i, (feats, label) in enumerate(testing):
-            
-            refsets[label].add(i)
-            observed = self.classify(feats, transform)
-            testsets[observed].add(i)
-            labels.add(label)
-            if observed == label:
+            assigned = self.classify(feats, transform)
+
+            if assigned == label:
                 if label == True:
                     truepos += 1
                 else:
@@ -123,6 +121,11 @@ class Sklearner:
 
         print(truepos, trueneg, falsepos, falseneg)
 
+        precision, recall = self._calcPrecisionAndRecall(truepos, trueneg, falsepos, falseneg)
+        
+        return precision, recall
+
+    def _calcPrecisionAndRecall(self, truepos, trueneg, falsepos, falseneg):
         try:
             precision = truepos/(truepos+falsepos)
         except ZeroDivisionError:
@@ -169,7 +172,7 @@ class Sklearner:
             X = self._transform([features])
         else:
             X = features
-            
+
         result = self.model.predict(X)
         return result[0]
 

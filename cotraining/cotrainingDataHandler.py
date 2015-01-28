@@ -9,14 +9,20 @@ def zipDataForCotraining(data):
     #need to convert this into
     #[[[feats00,feats10],label0], [[feats01,feats11],label1], ...]
 
-    features1, labels1 = list(zip(*data[0]))
-    features2, labels2 = list(zip(*data[1]))
-    assert(labels1 == labels2)
+    if len(data) > 1:
+        features1, labels1 = list(zip(*data[0]))
+        features2, labels2 = list(zip(*data[1]))
+        assert(labels1 == labels2)
         
-    return list(zip(zip(features1,features2),labels1))
-
+        return list(zip(zip(features1,features2),labels1))
+    
+    return data[0]
+    
 def unzipDataForCotraining(data):
     features, labels = zip(*data)
+    if type(features[0]) == dict:
+        return data
+    
     features1, features2 = zip(*features)
     return (list(zip(features1, labels)),
             list(zip(features2, labels)))
@@ -78,8 +84,12 @@ class CotrainingDataHandler:
         newUntaggedData = zipDataForCotraining(tmpUntaggedData)
         
         #sample here
-        startingData, remainingData = sampleDataWithoutReplacement(newUntaggedData,
-                                                                   self.untaggedSampleSize)
+        if self.untaggedSampleSize < len(newUntaggedData):
+            startingData, remainingData = sampleDataWithoutReplacement(newUntaggedData,
+                                                                       self.untaggedSampleSize)
+        else:
+            startingData = newUntaggedData
+            remainingData = []
 
         for i in range(self.numFolds):
             self.untaggedData.append({'cotraining': startingData,
@@ -128,9 +138,14 @@ class CotrainingDataHandler:
                            p,
                            n):
 
-        newUntaggedData, remainingSample = \
-                         sampleDataWithoutReplacement(remainingSample,
-                                                      2*p + 2*n)
+        numReplacements = len(self.featureSubsets) * (p+n)
+        if len(remainingSample) > numReplacements:
+            newUntaggedData, remainingSample = \
+                             sampleDataWithoutReplacement(remainingSample,
+                                                          numReplacements)
+        else:
+            newUntaggedData = remainingSample
+            remainingSample = []
         
         #add these new points to the untagged data set
         untaggedData = list(remainingUntaggedData) + list(newUntaggedData)

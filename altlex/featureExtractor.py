@@ -45,9 +45,9 @@ def makeDataset(data, featureExtractor, featureSettings, max=float('inf')):
     
         features = featureExtractor.addFeatures(dp, featureSettings)
 
-        if dataPoint['tag'] == 'causal':
+        if dp.getTag() == 'causal':
             taggedSet.append((features, True))
-        elif dataPoint['tag'] is None:
+        elif dp.getTag() is None:
             taggedSet.append((features, -1))
         else:
             taggedSet.append((features, False))

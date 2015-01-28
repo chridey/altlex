@@ -28,10 +28,13 @@ parser.add_argument('--numFolds', type=int, default=2,
                     help='the number of folds for crossvalidation (default: %(default)s)')
 
 parser.add_argument('--unlabeled', '-u', metavar='U',
-                    help = 'use additional unlabeled data (requires that the classifier be a semi-supervised learning algorithm')
+                    help = 'use additional unlabeled data (requires that the classifier be an unsupervised or semi-supervised learning algorithm')
 
 parser.add_argument('--test', '-t', action='store_true',
                     help = 'test on the set aside data (default: train only)')
+
+parser.add_argument('--balance', '-b', type=bool, default=True,
+                    help = 'whether to balance the data (default: %(default)s)')
 
 parser.add_argument('--save', metavar = 'S',
                     help = 'save the model to a file named S')
@@ -51,7 +54,7 @@ with open(args.infile) as f:
     data = json.load(f)
 
 if args.unlabeled:
-    assert(args.classifier in config.semisupervised)
+    assert(args.classifier in config.semisupervised or args.classifier in config.unsupervised)
     
     with open(args.unlabeled) as f:
         untaggedData = json.load(f)
@@ -87,7 +90,10 @@ for settingValues in itertools.product((True,False),
     classifier = classifierType()
 
     if args.crossvalidate:
-        classifier.crossvalidate(training, n_folds=args.numFolds, training=untaggedSet)
+        classifier.crossvalidate(training,
+                                 n_folds=args.numFolds,
+                                 training=untaggedSet,
+                                 balanced=args.balance)
     else:
         classifier.train(training + untaggedSet)
 

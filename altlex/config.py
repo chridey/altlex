@@ -4,9 +4,12 @@ from chnlp.ml.adaBoost import AdaBoost
 from chnlp.ml.svm import SVM
 from chnlp.ml.logisticRegression import LogisticRegression
 
-from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit
+from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit, GridSearchLabelSpreader
 
 from chnlp.ml.labelSpreading import LabelSpreader
+from chnlp.ml.transductiveSVM import TransductiveSVM
+
+from chnlp.ml.gmm import GMM
 
 from chnlp.altlex.featureExtractor import FeatureExtractor
 
@@ -39,11 +42,20 @@ class Config:
                 'logistic_regression': LogisticRegression,
                 'grid_search_svm': GridSearchSVM,
                 'grid_search_logistic_regression': GridSearchLogit,
-                'label_spreading': LabelSpreader}
+                'grid_search_label_spreading': GridSearchLabelSpreader,
+                'label_spreading': LabelSpreader,
+                'gmm': GMM,
+                'transductive_svm': TransductiveSVM}
 
     @property
     def semisupervised(self):
-        return {'label_spreading'}
+        return {'label_spreading',
+                'grid_search_label_spreading',
+                'transductive_svm'}
+
+    @property
+    def unsupervised(self):
+        return {'gmm'}
 
     def validate(self, params):
         assert(type(params) == dict)

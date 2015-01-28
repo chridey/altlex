@@ -4,8 +4,7 @@ import collections
 
 from chnlp.utils.utils import splitData
 from chnlp.utils.treeUtils import extractSelfCategory
-from chnlp.altlex.config import Config
-from chnlp.altlex.featureExtractor import makeDataset
+from chnlp.altlex.dataPoint import DataPoint
 
 with open(sys.argv[1]) as f:
     data = json.load(f)
@@ -15,20 +14,23 @@ if len(sys.argv) > 2:
 else:
     search = None
 
-config = Config()
-featureSettings = config.fixedSettings
-taggedData = makeDataset(data,
-                         config.featureExtractor,
-                         featureSettings)
-
-training, testing = splitData(taggedData)
+taggedData = []
+for dataPoint in data:
+    dp = DataPoint(dataPoint)
+    if dp.getTag() == 'causal':
+        taggedData.append((dp, True))
+    else:
+        taggedData.append((dp, False))
+        
+#training, testing = splitData(taggedData)
+training = taggedData
 
 counts = collections.defaultdict(int)
 causalCounts = collections.defaultdict(int)
-for dp in training:
+for dp,tag in training:
     if not search or dp.matchAltlex(search):
         counts[' '.join(dp.getAltlex())] += 1
-        if dp.getTag() == 'causal':
+        if tag:
             causalCounts[' '.join(dp.getAltlex())] += 1
         if search:
             print(dp.getCurrParse(), dp.getTag(),
