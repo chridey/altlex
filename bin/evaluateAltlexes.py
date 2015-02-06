@@ -7,7 +7,7 @@ import json
 import argparse
 import itertools
 
-from chnlp.utils.utils import splitData
+from chnlp.utils.utils import splitData,balance
 from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.altlex.config import Config
 
@@ -34,7 +34,7 @@ parser.add_argument('--test', '-t', action='store_true',
                     help = 'test on the set aside data (default: train only)')
 
 parser.add_argument('--balance', '-b', type=bool, default=True,
-                    help = 'whether to balance the data (default: %(default)s)')
+                    help = 'whether to balance the data by oversampling the positive class (default: %(default)s)')
 
 parser.add_argument('--save', metavar = 'S',
                     help = 'save the model to a file named S')
@@ -93,8 +93,11 @@ for settingValues in itertools.product((True,False),
         classifier.crossvalidate(training,
                                  n_folds=args.numFolds,
                                  training=untaggedSet,
-                                 balanced=args.balance)
+                                 balanced=args.balance,
+                                 printErrorAnalysis=True
+                                 )
     else:
+        training = balance(training)
         classifier.train(training + untaggedSet)
 
     classifier.show_most_informative_features(50)
@@ -103,6 +106,8 @@ for settingValues in itertools.product((True,False),
         accuracy = classifier.accuracy(testing)
         precision, recall = classifier.metrics(testing)
         classifier.printResults(accuracy, precision, recall)
+
+    classifier.close()
 
 if args.save:
     classifier.save(args.save)
