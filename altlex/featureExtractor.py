@@ -1,6 +1,10 @@
 import os
+import math
+import json
 from functools import lru_cache
 from collections import defaultdict
+
+import numpy
 
 from nltk.corpus.reader.wordnet import WordNetError
 from nltk.corpus import wordnet  as wn
@@ -12,6 +16,8 @@ from chnlp.altlex.extractSentences import CausalityScorer,MarkerScorer
 from chnlp.utils.treeUtils import extractRightSiblings, extractSelfParse, extractSelfCategory, extractParentCategory
 from chnlp.semantics.wordNetManager import WordNetManager
 from chnlp.semantics.verbNetManager import VerbNetManager
+
+from chnlp.altlex.taggedSet import TaggedDataPoint
 
 def wordnet_distance(word1, word2):
     maxy = 0
@@ -46,12 +52,15 @@ def makeDataset(data, featureExtractor, featureSettings, max=float('inf')):
         features = featureExtractor.addFeatures(dp, featureSettings)
 
         if dp.getTag() == 'causal':
-            taggedSet.append((features, True))
+            taggedDataPoint = TaggedDataPoint((features, True))
         elif dp.getTag() is None:
-            taggedSet.append((features, -1))
+            taggedDataPoint = TaggedDataPoint((features, -1))
         else:
-            taggedSet.append((features, False))
+            taggedDataPoint = TaggedDataPoint((features, False))
 
+        taggedDataPoint.addData(dp.data)
+        taggedSet.append(taggedDataPoint)
+        
     return taggedSet
 
 class FeatureExtractor:
@@ -66,11 +75,19 @@ class FeatureExtractor:
         self.wn = WordNetManager()
         self.vn = VerbNetManager()
         self.reporting = set(wn.synsets('say', pos=wn.VERB))
+        self.hedgingScores = None
         self.framenetScores = {'nn' : None,
                                'vb' : None,
                                'rb' : None,
-                               'jj' : None}
-
+                               'jj' : None,
+                               'nn_anticausal' : None,
+                               'vb_anticausal' : None,
+                               'rb_anticausal' : None,
+                               'jj_anticausal' : None}
+        self.wtmfLookup = None
+        self.wtmfWordMatrix = None
+        self.wtmfSeedMatrix = None
+        
         self.validFeatures = {'altlex_stem' : self.getAltlexStemNgrams,
                               'curr_stem' : self.getCurrStemNgrams,
                               'prev_stem' : self.getPrevStemNgrams,
@@ -100,6 +117,9 @@ class FeatureExtractor:
                               'first_pos' : self.getFirstPos,
                               'altlex_marker' : self.getAltlexMarker,
                               'altlex_length': self.getAltlexLength,
+                              'curr_length': self.getCurrLength,
+                              'prev_length': self.getPrevLength,
+                              'curr_length_post_altlex': self.getCurrPostLength,
                               'cosine' : self.getCosineSim,
                               'marker_cosine' : self.getMarkerCosineSim,
                               'tense' : self.getTense,
@@ -109,6 +129,10 @@ class FeatureExtractor:
                               'parent_category' : self.getParentCategory,
                               'productions' : self.getProductionRules,
                               'altlex_productions' : self.getAltlexProductionRules,
+                              'altlex_nouns' : self.getAltlexNouns,
+                              'altlex_verbs' : self.getAltlexVerbs,
+                              'hedging' : self.getHedgingScore,
+                              'wtmf': self.getWTMFScore,
                               }
 
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
@@ -116,7 +140,10 @@ class FeatureExtractor:
     @property
     def structuralFeatures(self):
         return {
-            'altlex_length' : True
+            'altlex_length' : True,
+            'curr_length' : False,
+            'prev_length' : False,
+            'curr_length_post_altlex' : False
         }
 
     @property
@@ -125,15 +152,20 @@ class FeatureExtractor:
             'coref' : True,
             'has_copula' : True, #seems to help
             'altlex_marker' : True,
-            'altlex_stem' : False, #doesnt help for NB, inconclusive for n=1 and RF
+            'altlex_stem' : True, #doesnt help for NB, inconclusive for n=1 and RF
             'curr_stem' : False, #doesnt help
             'prev_stem' : False, #doesnt help
+
+            'altlex_nouns' : False,
+            'altlex_verbs' : False,
 
             'intersection' : False, #inconclusive
             'noun_intersection' : False, #seems to hurt
 
             'cosine' : False, #inconclusive
             'marker_cosine' : False, #inconclusive
+
+            'wtmf': False,
         }
 
     @property
@@ -169,6 +201,7 @@ class FeatureExtractor:
             'theme_role_curr' : False,
             'theme_role_prev' : False, #helps for LR but not RF but why??
             'framenet' : True,
+            'hedging' : False,
         }
 
     @property
@@ -229,15 +262,36 @@ class FeatureExtractor:
                               dataPoint.getPrevStem())
 
     @lru_cache(maxsize=None)
+    def getAltlexNouns(self, dataPoint):
+        return {self.functionFeatures[self.getAltlexNouns] + noun: True \
+                for noun in dataPoint.getStemsForPos('N', 'altlex')}
+
+    @lru_cache(maxsize=None)
+    def getAltlexVerbs(self, dataPoint):
+        return {self.functionFeatures[self.getAltlexVerbs] + verb: True \
+                for verb in dataPoint.getStemsForPos('V', 'altlex')}
+
+    @lru_cache(maxsize=None)
     def getCoref(self, dataPoint):
-        altlexLower = dataPoint.getAltlexLower()
-        #also these, those
+        altlex = dataPoint.getAltlex()
+        altlexPos = dataPoint.getAltlexPos()
+
+        coref = False
+        for index,word in enumerate(altlex):
+            #only count when these are determiners
+            if word.lower() in {'this', 'that', 'these', 'those'} and \
+               altlexPos[index] == 'DT':
+                coref = True
+                break
+                
+        '''
         if 'this' in altlexLower or 'that' in altlexLower \
                or 'these' in altlexLower or 'those' in altlexLower:
             coref = True
         else:
             coref = False
-            
+        '''
+        
         return {self.functionFeatures[self.getCoref]:
                 coref}
 
@@ -285,6 +339,21 @@ class FeatureExtractor:
         return {self.functionFeatures[self.getAltlexLength]:
                 dataPoint.altlexLength}
 
+    def getCurrLength(self, dataPoint):
+        #batch these in groups of 5
+        return {self.functionFeatures[self.getAltlexLength]:
+                dataPoint.currSentenceLength}
+
+    def getPrevLength(self, dataPoint):
+        #batch these in groups of 5
+        return {self.functionFeatures[self.getAltlexLength]:
+                dataPoint.prevSentenceLength}
+
+    def getCurrPostLength(self, dataPoint):
+        #batch these in groups of 5
+        return {self.functionFeatures[self.getAltlexLength]:
+                dataPoint.currSentenceLengthPostAltlex}
+
     @lru_cache(maxsize=None)
     def getReporting(self, dataPoint):
         #get all the verbs in the sentence and determine overlap with reporting verbs
@@ -312,22 +381,38 @@ class FeatureExtractor:
 
     @lru_cache(maxsize=None)
     def getFinalReporting(self, dataPoint):
+        altlex = dataPoint.getAltlexLemmatized()
+        if len(altlex):
+            maxDist = max(wordnet_distance("say",
+                                           lemma)
+                          for lemma in dataPoint.getAltlexLemmatized())
+        else:
+            maxDist = 0
+
         return {self.functionFeatures[self.getFinalReporting] :
-                max(wordnet_distance("say",
-                                     lemma)
-                    for lemma in dataPoint.getAltlexLemmatized())}
+                maxDist}
 
     @lru_cache(maxsize=None)
     def getFinalTime(self, dataPoint):
+        altlex = dataPoint.getAltlexLemmatized()
+        if len(altlex):
+            distance = wordnet_distance("time",
+                                        altlex[-1])
+        else:
+            distance = 0
         return {self.functionFeatures[self.getFinalTime] :
-                wordnet_distance("time",
-                                 dataPoint.getAltlexLemmatized()[-1])}
+                distance}
 
     @lru_cache(maxsize=None)
     def getFinalExample(self, dataPoint):
+        altlex = dataPoint.getAltlexLemmatized()
+        if len(altlex):
+            distance = wordnet_distance("example",
+                                        altlex[-1])
+        else:
+            distance = 0
         return {self.functionFeatures[self.getFinalExample] :
-                wordnet_distance("example",
-                                 dataPoint.getAltlexLemmatized()[-1])}
+                distance}
 
     #wordnet similarity between all nouns in altlex and prev sentence
     #may provide another way of measuring coref
@@ -479,21 +564,89 @@ class FeatureExtractor:
                                  True})
         return features                                 
 
+    def _loadWTMF(self):
+        with open(os.path.join(FeatureExtractor.configPath,
+                               'wtmf_lookup.json')) as f:
+            lookup = json.load(f)
+        self.wtmfLookup = lookup['words']
+
+        with open(os.path.join(FeatureExtractor.configPath,
+                               'wtmf_matrix.json')) as f:
+            latentMatrices = json.load(f)
+            
+        self.wtmfWordMatrix, self.wtmfSeedMatrix = latentMatrices
+        
+    def getWTMFScore(self, dataPoint):
+        altlex = dataPoint.getAltlexStem()
+        curr = dataPoint.getCurrStemPostAltlex()
+
+        if self.wtmfLookup is None:
+            self._loadWTMF()
+
+        features = {}            
+        for name,stems in (('_altlex', altlex),
+                           #('_curr', curr)
+                           ):
+
+            latentVector = [0 for i in range(len(self.wtmfWordMatrix[0]))]
+            for stem in stems:
+                if stem in self.wtmfLookup:
+                    arrayIndex = self.wtmfLookup[stem]
+                    stemLatentVector = self.wtmfWordMatrix[arrayIndex]
+                    #print(stem, stemLatentVector)
+                    latentVector = numpy.add(latentVector, stemLatentVector)
+            #get vector length
+            #print(latentVector)
+            numpy.divide(latentVector, len(stems))
+            causalVector = numpy.dot(self.wtmfSeedMatrix, numpy.transpose([latentVector]))
+            print(stems, causalVector)
+            score = math.sqrt(numpy.dot(numpy.transpose(causalVector), causalVector))
+            features.update({self.functionFeatures[self.getWTMFScore] + name:
+                             score})
+
+        return features
+
+    @lru_cache(maxsize=None)
+    def getHedgingScore(self, dataPoint):
+        #sum of probabilities of encoding belief, might be related to causality
+        #stem and lowercase
+        if self.hedgingScores is None:
+            self.hedgingScores = defaultdict(float)
+            with open(os.path.join(FeatureExtractor.configPath,
+                                   'hedging')) as f:
+                for line in f:
+                    word,count = line.split()
+                    self.hedgingScores[self.sn.stem(word.lower())] += float(count)
+
+            sumCount = sum(self.hedgingScores.values())
+            for word in self.hedgingScores:
+                self.hedgingScores[word] /= sumCount
+
+        #for now just do one aggregate score
+        score = 0.0
+        stems = dataPoint.getCurrStem()
+        for stem in stems:
+            if stem in self.hedgingScores:
+                score += self.hedgingScores[stem]
+
+        return {self.functionFeatures[self.getHedgingScore]:
+                bool(score)}
+    
     @lru_cache(maxsize=None)
     def getFramenetScore(self, dataPoint):
         #sum of probabilities of encoding causality for words for different parts of speech
         #stem and lowercase
         for pos in self.framenetScores:
             if self.framenetScores[pos] is None:
-                self.framenetScores[pos] = {}
+                self.framenetScores[pos] = defaultdict(float)
                 with open(os.path.join(os.path.join(FeatureExtractor.configPath,
                                                     'framenet'), pos)) as f:
                     for line in f:
-                        p,word,count1,count2,score = line.split()
-                        score = float(score)
+                        p,word,count1,count2,score,entropy = line.split()
+                        score = float(entropy)
                         if score > 0.0:
                             self.framenetScores[pos][self.sn.stem(word.lower())] \
-                                = score
+                                += score
 
         #for now just do one aggregate score, also try different parts of speech
         #variations - only look at altlex or post altlex or entire sentence
@@ -501,17 +654,30 @@ class FeatureExtractor:
         #           - combined score for all parts of speech
         #           - individual scores
         score = defaultdict(float)
-        length = dataPoint.altlexLength
-        
+
+        for length,fragment in ((dataPoint.altlexLength, '_altlex'),
+                                (dataPoint.currSentenceLengthPostAltlex, '_curr_post')):
+            for i in range(length):
+                pos = dataPoint.getCurrPos()[i][:2].lower()
+                stem = dataPoint.getCurrStem()[i]
+                if pos in self.framenetScores and stem in self.framenetScores[pos]:
+                    score[fragment] += self.framenetScores[pos][stem]
+                if pos + '_anticausal' in self.framenetScores and stem in self.framenetScores[pos]:
+                    score[fragment + '_anticausal'] += self.framenetScores[pos][stem]
+
+        '''
+        fragment = 'prev'
+        length = dataPoint.prevSentenceLength
         for i in range(length):
-            pos = dataPoint.getCurrPos()[i][:2].lower()
-            stem = dataPoint.getCurrStem()[i]
+            pos = dataPoint.getPrevPos()[i][:2].lower()
+            stem = dataPoint.getPrevStem()[i]
             if pos in self.framenetScores and stem in self.framenetScores[pos]:
-                score[''] += self.framenetScores[pos][stem]
+                score[fragment] += self.framenetScores[pos][stem]
+        '''
 
         #print(score)
-        return {self.functionFeatures[self.getFramenetScore] + pos :
-                score[pos] for pos in score}
+        return {self.functionFeatures[self.getFramenetScore] + fragment :
+                score[fragment] for fragment in score}
 
     #syntactic features based on work by Pitler, Biran
     #also consider syntactic angles
@@ -541,8 +707,12 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getRightSiblings(self, dataPoint):
         tree = dataPoint.getCurrParse()
-        siblings = extractRightSiblings(dataPoint.getAltlex(), tree)
-
+        altlex = dataPoint.getAltlex()
+        if len(altlex):
+            siblings = extractRightSiblings(altlex, tree)
+        else:
+            siblings = []
+            
         #print(tree, siblings)
         return {self.functionFeatures[self.getRightSiblings] + s :
                 True for s in siblings}
@@ -552,8 +722,12 @@ class FeatureExtractor:
     @lru_cache(maxsize=None)
     def getSelfCategory(self, dataPoint):
         #could be none if altlex is not fully contained in a constituent
-        cat = extractSelfCategory(dataPoint.getAltlex(),
-                                  dataPoint.getCurrParse())
+        altlex = dataPoint.getAltlex()
+        if len(altlex):
+            cat = extractSelfCategory(altlex,
+                                      dataPoint.getCurrParse())
+        else:
+            cat = None
 
         return {self.functionFeatures[self.getSelfCategory] + str(cat) :
                 True}

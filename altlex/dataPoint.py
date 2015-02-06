@@ -5,6 +5,10 @@ class DataPoint:
         self._dataDict = dataDict
         self._altlexLower = None
         self._currParse = None
+
+    @property
+    def data(self):
+        return self._dataDict
         
     def __hash__(self):
         return ' '.join(self.getPrevWords() + self.getCurrWords()).__hash__()
@@ -15,12 +19,28 @@ class DataPoint:
     @property
     def altlexLength(self):
         return self._dataDict['altlexLength']
+
+    @property
+    def currSentenceLength(self):
+        return len(self.getCurrWords())
+
+    @property
+    def prevSentenceLength(self):
+        return len(self.getPrevWords())
+
+    @property
+    def currSentenceLengthPostAltlex(self):
+        return len(self.getCurrWordsPostAltlex())
+
+    def getSentences(self):
+        #return both sentences in order as a string
+        return ' '.join(self.getPrevWords() + self.getCurrWords())
         
     def getAltlex(self):
         if self.altlexLength > 0:
             return self.getCurrWords()[:self.altlexLength]
         else:
-            return None
+            return []
 
     def matchAltlex(self, phrase):
         a = self.getAltlex()
@@ -28,18 +48,19 @@ class DataPoint:
             return False
         if a == phrase.split():
             return True        
-
+        return False
+    
     def getAltlexLemmatized(self):
         if self.altlexLength > 0:
             return self.getCurrLemmas()[:self.altlexLength]
         else:
-            return None
+            return []
 
     def getAltlexStem(self):
         if self.altlexLength > 0:
             return self.getCurrStem()[:self.altlexLength]
         else:
-            return None
+            return []
 
     def getAltlexLower(self):
         if self._altlexLower is not None:
@@ -53,7 +74,7 @@ class DataPoint:
         if self.altlexLength > 0:
             return self._dataDict['sentences'][0]['pos'][:self.altlexLength]
         else:
-            return None
+            return []
     
     def getCurrLemmas(self):
         return self._dataDict['sentences'][0]['lemmas']
@@ -69,6 +90,9 @@ class DataPoint:
 
     def getCurrWords(self):
         return self._dataDict['sentences'][0]['words']
+
+    def getCurrWordsPostAltlex(self):
+        return self.getCurrWords()[self.altlexLength:]
 
     def getPrevWords(self):
         return self._dataDict['sentences'][1]['words']
@@ -101,7 +125,7 @@ class DataPoint:
         if self.altlexLength > 0:
             return self._dataDict['sentences'][0][form][:self.altlexLength]
         else:
-            return None
+            return []
 
     def _getCurr(self, form='words'):
         assert(form in ('words', 'lemmas', 'stems'))
@@ -109,10 +133,7 @@ class DataPoint:
 
     def _getPrev(self, form='words'):
         assert(form in ('words', 'lemmas', 'stems'))
-        if self.altlexLength > 0:
-            return self._dataDict['sentences'][1][form]
-        else:
-            return None
+        return self._dataDict['sentences'][1][form]
 
     def getStemsForPos(self, pos, part, form='stems'):
         if part == 'altlex':

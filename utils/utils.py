@@ -29,7 +29,7 @@ def sampleDataWithoutReplacement(data, numSamples):
 
     return sample, indexedSubset(data, remainingIndices)
 
-def splitData(data, proportion=.3, min=150):
+def splitData(data, proportion=.3, min=0):
     #now set aside at least 150 examples for testing or 30%, whichever is greater
 
     trueExamples = list(filter(lambda x:x[1], data))
@@ -37,7 +37,8 @@ def splitData(data, proportion=.3, min=150):
 
     numTrueTesting = int(max(min, len(trueExamples)*proportion))
     numTrueTraining = len(trueExamples) - numTrueTesting
-    proportion = numTrueTesting/len(trueExamples)
+    if len(trueExamples):
+        proportion = numTrueTesting/len(trueExamples)
     numFalseTraining = int((1-proportion) * len(falseExamples))
     #oversamplingRatio = int(numFalseTraining/numTrueTraining)
     #numFalseTraining = numTrueTraining * oversamplingRatio

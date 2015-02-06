@@ -1,3 +1,5 @@
+import os
+import json
 import collections
 import pickle
 
@@ -58,7 +60,7 @@ class Sklearner:
                       training=(),
                       balanced=True,
                       printErrorAnalysis=False):
-        
+
         features, y = zip(*validation)
         if len(training):
             tfeatures, ty = zip(*training)
@@ -74,7 +76,7 @@ class Sklearner:
         accuracy = []
         precisions = []
         recalls = []
-        for train_index,test_index in skf:
+        for index, (train_index,test_index) in enumerate(skf):
             tri = set(train_index)
             X_train = indexedSubset(X, tri)
             #print(type(X_train)) #tuple
@@ -97,6 +99,10 @@ class Sklearner:
 
             accuracy.append(self.accuracy(zip(X_test, y_test), False))
             precision,recall = self.metrics(zip(X_test, y_test), False)
+            if printErrorAnalysis:
+                self.printErrorAnalysis(indexedSubset(validation, tei),
+                                        suffix='_{}'.format(index))
+                
             precisions.append(precision)
             recalls.append(recall)
 
@@ -106,6 +112,37 @@ class Sklearner:
         #need to oversample again
         return self.train(zip(X, y), False)
 
+    def printErrorAnalysis(self,
+                           data,
+                           transform=True,
+                           suffix='',
+                           dir = ''
+                           ):
+
+        false_positives = []
+        false_negatives = []
+        true_positives = []
+        
+        for i, dataPoint in enumerate(data):
+            feats, label = dataPoint
+            assigned = self.classify(feats, transform)
+            if assigned != label:
+                if label == False:
+                    false_positives.append(dataPoint.data)
+                else:
+                    false_negatives.append(dataPoint.data)                    
+            elif label==True:
+                true_positives.append(dataPoint.data)
+                
+        with open(os.path.join(dir, 'false_positives' + suffix), 'w') as fp:
+            json.dump(false_positives, fp)
+            
+        with open(os.path.join(dir, 'false_negatives' + suffix), 'w') as fn:
+            json.dump(false_negatives, fn)
+                
+        with open(os.path.join(dir, 'true_positives' + suffix), 'w') as fn:
+            json.dump(true_positives, fn)
+                
     def metrics(self, testing, transform=True):
         truepos = 0
         trueneg = 0
@@ -220,3 +257,7 @@ class Sklearner:
         joblib.dump(self.model, filename, compress=9)
         with open(filename + '.map', 'wb') as f:
             pickle.dump(self.featureMap, f)
+
+    def close(self):
+        #do any cleanup
+        pass

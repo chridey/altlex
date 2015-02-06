@@ -22,6 +22,9 @@ parser.add_argument('--outfile', metavar='O', type=open,
 parser.add_argument('-a', '--altlexes', metavar='A',
                     help='the name of the file containing the altlexes, optional')
 
+parser.add_argument('--all', action='store_true',
+                    help='use all data whether it contains an altlex or not')
+
 parser.add_argument('-u', '--unsupervised', action='store_true',
                     help='flag to indicate data is not tagged')
 
@@ -87,9 +90,11 @@ try:
                 else:
                     match = extractAltlex(sentence.parse).split()
 
-            if match:
-                data.append((sentence, prevSentence, match))
-
+                if match:
+                    data.append((sentence, prevSentence, match))
+                elif args.all:
+                    data.append((sentence, prevSentence, []))
+                
             prevSentence = sentence
 
             if time.time() - starttime > timeout or len(data) > maxPoints:

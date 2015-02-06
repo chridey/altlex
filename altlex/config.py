@@ -11,6 +11,8 @@ from chnlp.ml.transductiveSVM import TransductiveSVM
 
 from chnlp.ml.gmm import GMM
 
+from chnlp.mixture.mixtureClient import MixtureClient
+
 from chnlp.altlex.featureExtractor import FeatureExtractor
 
 class Config:
@@ -26,7 +28,7 @@ class Config:
     def defaultParams(self):
         return {'classifier': {'name': 'svm',
                                'settings': {}},
-                'features': {'experimental': {},
+                'features': {'experimental': {},#'altlex_stem', 'curr_stem', 'prev_stem'}, #'curr_length', 'prev_length', 'curr_length_post_altlex'}, #'hedging'}, #'altlex_nouns', 'altlex_verbs'},
                              'fixed': self.featureExtractor.defaultSettings}}
 
     def setParams(self, params):
@@ -45,13 +47,15 @@ class Config:
                 'grid_search_label_spreading': GridSearchLabelSpreader,
                 'label_spreading': LabelSpreader,
                 'gmm': GMM,
-                'transductive_svm': TransductiveSVM}
+                'transductive_svm': TransductiveSVM,
+                'constrained_gmm': MixtureClient}
 
     @property
     def semisupervised(self):
         return {'label_spreading',
                 'grid_search_label_spreading',
-                'transductive_svm'}
+                'transductive_svm',
+                'constrained_gmm'}
 
     @property
     def unsupervised(self):
