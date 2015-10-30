@@ -4,25 +4,26 @@ from chnlp.ml.adaBoost import AdaBoost
 from chnlp.ml.svm import SVM
 from chnlp.ml.logisticRegression import LogisticRegression
 
-from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit, GridSearchLabelSpreader
+from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit, GridSearchSGD, GridSearchLabelSpreader,GridSearchPipeline
 
 from chnlp.ml.labelSpreading import LabelSpreader
 from chnlp.ml.transductiveSVM import TransductiveSVM
 
+try:
+    from chnlp.ml.rnnLearner import RNNLearner
+except ImportError:
+    RNNLearner = None
+    
 from chnlp.ml.gmm import GMM
 
 from chnlp.mixture.mixtureClient import MixtureClient
 
-from chnlp.altlex.featureExtractor import FeatureExtractor
+import chnlp.altlex.featureExtractor as fe
+#from chnlp.altlex.featureExtractor import FeatureExtractor
 
 class Config:
     def __init__(self, params=None):
-        self.featureExtractor = FeatureExtractor()
-
-        if params is None:
-            self.params = self.defaultParams
-        else:
-            self.setParams(params)
+        self.setParams(params)
 
     @property
     def defaultParams(self):
@@ -32,9 +33,28 @@ class Config:
                              'fixed': self.featureExtractor.defaultSettings}}
 
     def setParams(self, params):
-        self.validate(params)
-        self.params = params
-    
+        if params is None:
+            self.featureExtractor = fe.FeatureExtractor()
+            self.params = self.defaultParams
+        else:
+            self.validate(params)
+            self.params = params
+
+            if 'cacheSize' in params:
+                fe.cacheSize = params['cacheSize']
+            
+            self.featureExtractor = fe.FeatureExtractor()
+
+    def setFeatures(self, features):
+        features = set(features)
+        for feature in features:
+            assert(feature in self.featureExtractor.validFeatures)
+        for f in self.params['features']['fixed']:
+            if f in features:
+                self.params['features']['fixed'][f] = True
+            else:
+                self.params['features']['fixed'][f] = False
+                
     @property
     def classifiers(self):
         return {'random_forest': RandomForest,
@@ -44,11 +64,14 @@ class Config:
                 'logistic_regression': LogisticRegression,
                 'grid_search_svm': GridSearchSVM,
                 'grid_search_logistic_regression': GridSearchLogit,
+                'grid_search_sgd': GridSearchSGD,
                 'grid_search_label_spreading': GridSearchLabelSpreader,
+                'grid_search_pipeline': GridSearchPipeline,
                 'label_spreading': LabelSpreader,
                 'gmm': GMM,
                 'transductive_svm': TransductiveSVM,
-                'constrained_gmm': MixtureClient}
+                'constrained_gmm': MixtureClient,
+                'rnn': RNNLearner}
 
     @property
     def semisupervised(self):
@@ -65,7 +88,7 @@ class Config:
         assert(type(params) == dict)
         assert('classifier' in params)
         assert('name' in params['classifier'])
-        assert('settings' in params['classifier']['name'])
+        assert('settings' in params['classifier'])
         assert(params['classifier']['name'] in self.classifiers)
 
         assert('features' in params)
