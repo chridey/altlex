@@ -4,7 +4,8 @@ from chnlp.ml.sklearner import Sklearner
 
 class RandomForest(Sklearner):
     def __init__(self):
-        super().__init__()
+        #super().__init__()
+        Sklearner.__init__(self)
         self.classifier = RandomForestClassifier(n_estimators=1000,
                                                  #tried 10, 100, and 500
                                                  #higher number increases precision

@@ -11,6 +11,7 @@ from sklearn.cross_validation import StratifiedKFold
 from sklearn.externals import joblib
 
 from sklearn.feature_extraction import DictVectorizer
+from sklearn.metrics import precision_recall_fscore_support
 
 from sklearn.utils import shuffle
 
@@ -18,86 +19,75 @@ from scipy.stats import ttest_rel
 
 from chnlp.utils.utils import indexedSubset, balance
 
-def load(filename):
-    classifier = Sklearner()
-
-    #with open(filename + '.map', 'rb') as f:
-    #    classifier.featureMap = pickle.load(f)
-    classifier.model = joblib.load(filename)
-    classifier.vectorizer = joblib.load(filename + '_vectorizer')
-    return classifier
-
 class Sklearner:
-    def __init__(self):
+    def __init__(self, classifier, transformer=None, preprocessor=None):
         #self.featureMap = None
         #self.reverseFeatureMap = None
-        self.vectorizer = None
-        
-    def _transform(self, features):
-        '''
-        if self.featureMap is None:
-            self.featureMap = {}
-            counter = 0
-            for feature in features:
-                for featureName in feature:
-                    if featureName not in self.featureMap:
-                        self.featureMap[featureName] = counter
-                        counter += 1
+        self.classifier = classifier
+        self.transformer = transformer
+        if self.transformer is None:
+            self.transformer = getattr(self.classifier, 'transformer', None)
+        if self.transformer is None:
+            self._forced = True
         else:
-            counter = len(self.featureMap)
+            self._forced = False
+        if preprocessor is None:
+            class IdentityPreprocessor:
+                def fit_transform(self, X): return X
+            self.preprocessor = IdentityPreprocessor()
+        else:
+            self.preprocessor = preprocessor
 
-        #change this to be a numpy array?
-        X = []
-        for feature in features:
-            x = [0] * counter
-            for featureName in feature:
-                if featureName in self.featureMap:
-                    x[self.featureMap[featureName]] = float(feature[featureName])
-            X.append(x)
+        print(type(self.transformer))
         
-        return X
-        '''
-        if self.vectorizer is None:
-            self.vectorizer = DictVectorizer()
-            return self.vectorizer.fit_transform(features)
+    def transform(self, features, force=False):
+        if self.transformer is None or (force and self._forced):
+            self.transformer = DictVectorizer()
+            return self.preprocessor.fit_transform(self.transformer.fit_transform(features).toarray())
             
-        X = self.vectorizer.transform(features)
-        #print(X.shape)
-        return X
+        return self.preprocessor.fit_transform(self.transformer.transform(features).toarray())
     
-    def train(self, training, transform=True):
-        X, Y = zip(*training)
-        if transform:
-            X = self._transform(X)
+    def fit(self, X, y):
         #shuffle the data, important for classifiers such as SGD
-        if type(X) != list:
-            print(X.shape)
-        X, Y = shuffle(X, Y, random_state=0)
+        X, y = shuffle(X, y, random_state=0)
 
-        Y = [int(i) for i in Y]
-        #print(X[:10].nonzero(), Y[:10])
-
-        self.model = self.classifier.fit(X, Y)
+        y = np.array(y, dtype=int)
+        self.model = self.classifier.fit(X, y)
         return self.model
 
+    def fit_transform(self, X, y):
+        X = self.transform(X, True)
+        print(X.shape)
+        return self.fit(X, y)
+
+    def predict(self, X):
+        return self.model.predict(X)
+
+    def metrics(self, X, y):
+        X = self.transform(X)
+        y = np.array(y, dtype=int)
+        y_predict = self.predict(X)
+        accuracy = 1. * sum(y_predict == y) / y.shape[0]
+        precision, recall, f_score, support = precision_recall_fscore_support(y, y_predict)
+        return accuracy, precision, recall, f_score,  y_predict
+
     def crossvalidate(self,
-                      validation,
+                      X,
+                      y,
                       n_folds=2,
-                      training=(),
+                      training=(None,None),
                       balanced=True,
+                      printResults=False,
                       printErrorAnalysis=False):
 
-        features, y = zip(*validation)
-        if len(training):
-            tfeatures, ty = zip(*training)
+        tX, ty = training
+        y = np.array(y)
+        if tX is not None:
+            X_trans = self.transform(X + tX)
+            tX_trans = self.transform(tX)
         else:
-            tfeatures = ()
-            ty = ()
-        print(len(features+tfeatures))
-        X = self._transform(features + tfeatures)
-        tX = []
-        if len(tfeatures):
-            tX = self._transform(tfeatures)
+            X_trans = self.transform(X)
+
         skf = StratifiedKFold(y,
                               n_folds=n_folds,
                               random_state=1) #make sure we always use same data
@@ -105,49 +95,57 @@ class Sklearner:
         accuracy = []
         precisions = []
         recalls = []
+        print(X_trans.shape)
         for index, (train_index,test_index) in enumerate(skf):
-            tri = set(train_index)
-            X_train = indexedSubset(features, tri) #X[train_index] #indexedSubset(X, tri)
-            #print(type(X_train)) #tuple
-            #print(type(tX)) #list
-            y_train = indexedSubset(y, tri)
-
+            X_train = X_trans[train_index]
+            y_train = y[train_index]
+            print(sum(y_train))
             #need to oversample here
             balancedData = list(zip(X_train, y_train))
             if balanced:
                 balancedData = balance(balancedData)
 
             #now combine with any data that should always be in training
-            validationData = balancedData# + list(zip(tfeatures)) #tX, ty))
-            
-            clf = self.train(validationData)#, False)
-            
-            tei = set(test_index)
-            X_test = X[test_index]#indexedSubset(X, tei)
-            y_test = indexedSubset(y, tei)
+            X_train, y_train = list(zip(*balancedData))
+            if tX is not None:
+                X_train += tX_trans
+                y_train += ty
 
-            accuracy.append(self.model.score(X_test, y_test))
-            #accuracy.append(self.accuracy(zip(X_test, y_test), False))
-            precision,recall = self.metrics(zip(X_test, y_test), False)
+            print(len(X_train), len(y_train))
+
+            clf = self.fit(np.array(X_train), y_train)
+            
+            X_test = X_trans[test_index]
+            y_test = y[test_index]
+
+            accuracy_, precision, recall, f_score = self.metrics(X_test, y_test)
+            accuracy.append(accuracy_)
+            precisions.append(precision[1])
+            recalls.append(recall[1])
+
             if printErrorAnalysis:
-                self.printErrorAnalysis(indexedSubset(validation, tei),
+                self.printErrorAnalysis(indexedSubset(X, set(test_index)),
+                                        y_test,
+                                        y_predict,
                                         suffix='_{}'.format(index))
-                
-            precisions.append(precision)
-            recalls.append(recall)
 
-        self.printResults(accuracy, precisions, recalls)
+        if printResults:
+            self.printResults(accuracy, precisions, recalls)
         
         #train the final classifier on all the data
-        #need to oversample again
-        finalTrain = list(zip(features,y))#X,y))
+        #need to sample again
+        X_final,y_final = X[:len(y)],y
         if balanced:
-            finalTrain = balance(finalTrain)
-        return self.train(finalTrain)#, False)
+            X_final,y_final = zip(*balance(list(zip(X_final, y_final))))
+        if tX is not None:
+            X_final += tX
+            y_final += ty
+        return self.fit_transform(np.array(X_final), y_final)
 
     def printErrorAnalysis(self,
-                           data,
-                           transform=True,
+                           X,
+                           y_true,
+                           y_predict,
                            suffix='',
                            dir = ''
                            ):
@@ -156,11 +154,9 @@ class Sklearner:
         false_negatives = []
         true_positives = []
         
-        for i, dataPoint in enumerate(data):
-            feats, label = dataPoint
-            assigned = self.classify(feats, transform)
-            if assigned != label:
-                if label == False:
+        for i, dataPoint in enumerate(X):
+            if y_true[i] != y_predict[i]:
+                if y_predict[i] == False:
                     false_positives.append(dataPoint.data)
                 else:
                     false_negatives.append(dataPoint.data)                    
@@ -176,47 +172,6 @@ class Sklearner:
         with open(os.path.join(dir, 'true_positives' + suffix), 'w') as fn:
             json.dump(true_positives, fn)
                 
-    def metrics(self, testing, labels=None, transform=True):
-        truepos = 0
-        trueneg = 0
-        falsepos = 0
-        falseneg = 0
-
-        for i, dp in enumerate(testing):
-            if labels is None:
-                feats,label = dp
-            else:
-                feats=testing[i]
-                label=labels[i]
-            assigned = self.classify(feats, transform)
-            if assigned == label:
-                if label == True:
-                    truepos += 1
-                else:
-                    trueneg += 1
-            elif label == False:
-                falsepos +=1
-            else:
-                falseneg += 1
-
-        print(truepos, trueneg, falsepos, falseneg)
-
-        precision, recall = self._calcPrecisionAndRecall(truepos, trueneg, falsepos, falseneg)
-        
-        return precision, recall
-
-    def _calcPrecisionAndRecall(self, truepos, trueneg, falsepos, falseneg):
-        try:
-            precision = 1.0*truepos/(truepos+falsepos)
-        except ZeroDivisionError:
-            precision = float('nan')
-
-        try:
-            recall = 1.0*truepos/(truepos+falseneg)
-        except ZeroDivisionError:
-            recall = float('nan')
-
-        return precision, recall
 
     def printResults(self, accuracy, precision, recall): #handle=sys.stdout
         if type(accuracy) == list:
@@ -249,43 +204,12 @@ class Sklearner:
 
         return f_measure
             
-    def classify(self, features, transform=True):
-        if transform:
-            assert(type(features) == dict)
-            X = self._transform([features])
-        elif type(features) in (list, tuple):
-            X = [features]
-        else:
-            X = features
-
-        result = self.model.predict(X)
-        return result[0]
-
     def prob(self, features, transform=True):
         raise NotImplementedError
 
     def confidence(self, features, transform=True):
         raise NotImplementedError
     
-    def accuracy(self, testing, labels=None, transform=True):
-        if labels is None:
-            X, Y = zip(*testing)
-        else:
-            X=testing
-            Y=labels
-        if transform:
-            X = self._transform(X)
-        if type(X) != list:
-            print(X.shape)
-        return self.model.score(X,Y)
-
-    def transform(self, data):
-        X, y = zip(*data)
-        X = self._transform(X)
-        if type(X) != list:
-            print(X.shape)
-        return X,y
-
     @property
     def numClasses(self):
         return self.model.classes_
@@ -306,13 +230,13 @@ class Sklearner:
 
         '''
 
-        if self.vectorizer is None:
+        if self.transformer is None:
             return None
 
         self.featureImportances = []
         print(len(self._feature_importances))
         for i,f in enumerate(self._feature_importances):
-            self.featureImportances.append((self.vectorizer.get_feature_names()[i],
+            self.featureImportances.append((self.transformer.get_feature_names()[i],
                                            f))
         self.featureImportances = sorted(self.featureImportances,
                                          key=lambda x:abs(x[1]),
@@ -324,15 +248,29 @@ class Sklearner:
          #print(self.model.feature_importances_)
 
     def save(self, filename):
-        joblib.dump(self.model, filename, compress=9)
-        joblib.dump(self.vectorizer, filename + '_vectorizer', compress=9)
+        try:
+            joblib.dump(self.model, filename, compress=9)
+            joblib.dump(self.transformer, filename + '_vectorizer', compress=9)
+        except Exception as e:
+            print("ERROR: {}".format(e))
+            joblib.dump(self.model, filename)
+            joblib.dump(self.transformer, filename + '_vectorizer')
         #with open(filename + '.map', 'wb') as f:
         #    pickle.dump(self.featureMap, f)
+
+    @classmethod
+    def load(cls, filename):
+        model = joblib.load(filename)
+        classifier = cls(model)        
+        classifier.transformer = joblib.load(filename + '_vectorizer')
+        classifier.model = classifier.classifier
+        return classifier
 
     def close(self):
         #do any cleanup
         self.featureMap = None
         self.reverseFeatureMap = None
+
 
 
     

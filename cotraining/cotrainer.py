@@ -3,7 +3,7 @@ import collections
 
 from chnlp.ml.sklearner import Sklearner
 from chnlp.utils.utils import indexedSubset
-from chnlp.cotraining.cotrainingDataHandler import unzipDataForCotraining
+from chnlp.cotraining.cotrainingDataHandler import unzipDataForCotraining, zipDataForCotraining
 
 class NotProbabilistic(Exception):
     pass
@@ -25,7 +25,7 @@ class Cotrainer(Sklearner):
             queue = collections.defaultdict(list)
             for i,datum in enumerate(unzippedUntaggedData[index]):
                 #datum is tuple of features,label
-                probs = self.classifiers[index].prob(datum[0])
+                probs = self.classifiers[index].confidence(datum[0])
                 for k in range(len(probs)):
                     queue[k].append((probs[k], i))
 
@@ -39,14 +39,15 @@ class Cotrainer(Sklearner):
             positiveIndices = set(*itertools.islice(zip(*topPositive),1,2))
 
             #print(negativeIndices, positiveIndices)
-            newNegatives = list(zip(*indexedSubset(untaggedData, negativeIndices)))[0]
-            taggedData += list(zip(newNegatives, [False] * n))
-            newPositives = list(zip(*indexedSubset(untaggedData, positiveIndices)))[0]
-            taggedData += list(zip(newPositives,
+            for j in range(len(self.classifiers)):
+                newNegatives = list(zip(*indexedSubset(untaggedData[j], negativeIndices)))[0]
+                taggedData[j] += list(zip(newNegatives, [False] * n))
+                newPositives = list(zip(*indexedSubset(untaggedData[j], positiveIndices)))[0]
+                taggedData[j] += list(zip(newPositives,
                                   [True] * p))
 
-            remainingIndices = set(range(len(untaggedData))) - negativeIndices - positiveIndices
-            untaggedData = indexedSubset(untaggedData, remainingIndices)
+                remainingIndices = set(range(len(untaggedData[j]))) - negativeIndices - positiveIndices
+                untaggedData[j] = indexedSubset(untaggedData[j], remainingIndices)
             
         return taggedData, untaggedData
 
@@ -55,7 +56,7 @@ class Cotrainer(Sklearner):
         return 0
 
     def metrics(self, testing, transform=True):
-        super().metrics(zipDataForCotraining(testing), transform)
+        return super().metrics(zipDataForCotraining(testing), transform)
 
     def classify(self, features, transform=True):
         #need to get the probability of each class for
@@ -86,7 +87,7 @@ class SelfTrainer(Cotrainer):
         super(Cotrainer, self).__init__(**kwargs)
 
     def metrics(self, testing, transform=True):
-        super(Cotrainer, self).metrics(testing[0], transform)
+        return super(Cotrainer, self).metrics(testing[0], transform)
         
     def classify(self, features, transform=True):
         return self.classifiers[0].classify(features, transform)

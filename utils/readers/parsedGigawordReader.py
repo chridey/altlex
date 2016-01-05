@@ -14,7 +14,11 @@ class ParsedGigawordReader:
                     print(ti.name)
                     if ti.name.endswith('.xml'):
                         f = tf.extractfile(ti)
-                        root = ET.parse(f).getroot()
+                        try:
+                            root = ET.parse(f).getroot()
+                        except IOError as e:
+                            print(e)
+                            continue
                         assert(root.tag == 'root')
                         for document in root:
                             yield document

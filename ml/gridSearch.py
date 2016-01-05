@@ -1,5 +1,5 @@
 from sklearn import preprocessing
-from sklearn.linear_model import LogisticRegression as lr
+from sklearn.linear_model import LogisticRegression
 from sklearn.linear_model import SGDClassifier
 from sklearn.svm import SVC
 from sklearn.semi_supervised import LabelSpreading,LabelPropagation
@@ -7,8 +7,8 @@ from sklearn.semi_supervised import LabelSpreading,LabelPropagation
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedKFold
 
-from chnlp.ml.svm import SVM
-from chnlp.ml.logisticRegression import LogisticRegression
+
+
 from chnlp.ml.sgd import SGD
 from chnlp.ml.labelSpreading import LabelSpreader,LabelPropagator
 from chnlp.ml.sklearner import Sklearner
@@ -18,7 +18,9 @@ from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
-class GridSearch(Sklearner):
+from sklearn.base import BaseEstimator
+
+class GridSearch(BaseEstimator):
     def setClassifier(self):
         #skf = StratifiedKFold(y,
         #                      n_folds=2)
@@ -30,7 +32,8 @@ class GridSearch(Sklearner):
                                        n_jobs=4,
                                        verbose=1)
                                        #cv=skf)
-    
+
+    '''
     def train(self, features, transform=True):
         #super().train(features, transform)
         Sklearner.train(self,features, transform)
@@ -39,22 +42,25 @@ class GridSearch(Sklearner):
         print(self.classifier.grid_scores_)
         self.model = self.classifier.best_estimator_
         return self.model
+    '''
+    def fit(self, X, y):
+        return self.classifier.fit(X, y)
     
-class GridSearchSVM(GridSearch, SVM):
+class GridSearchSVM(GridSearch):
     def __init__(self):
         #super().__init__()
-        SVM.__init__(self)
+        GridSearch.__init__(self)
         self.classifierType = SVC#(kernel='linear')#(verbose=True)
         self.parameters = {}#'kernel': 'linear'}
         self.searchParameters = {'C': (.1, 1, 10, 100, 1000),
                            }#'gamma': (0, .0001, .001, .01, .1)} #, 1)}
         self.setClassifier()
 
-class GridSearchLogit(GridSearch, LogisticRegression):
+class GridSearchLogit(GridSearch):
     def __init__(self):
         #super().__init__()
-        LogisticRegression.__init__(self)
-        self.classifierType = lr
+        GridSearch.__init__(self)
+        self.classifierType = LogisticRegression
         self.parameters = {}
         self.searchParameters = {'C': (.01, .1, 1, 10, 100)}
         self.setClassifier()
@@ -62,10 +68,10 @@ class GridSearchLogit(GridSearch, LogisticRegression):
 class GridSearchSGD(GridSearch, SGD):
     def __init__(self):
         #super().__init__()
-        SGD.__init__(self)
+        GridSearch.__init__(self)
         self.classifierType = SGDClassifier
         self.parameters = {}
-        self.searchParameters = {'penalty': ('none', 'l2', 'l1', 'elasticnet'),
+        self.searchParameters = {'penalty': ('l2', 'elasticnet'),
                            'alpha': (0.001, 0.0001, 0.00001)}
         self.setClassifier()
         

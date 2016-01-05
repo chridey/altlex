@@ -11,7 +11,8 @@ def writeDataJSON(data, handle):
                            "stems": s.stems,
                            "pos": s.pos,
                            "ner": s.ner,
-                           "parse": s.parseString})
+                           "parse": s.parseString,
+                           "dependencies": s.dependencies})
 
         tag = getattr(sentence, 'tag', None)
             

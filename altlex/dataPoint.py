@@ -1,10 +1,65 @@
+import copy
+import re
+
 from nltk import Tree
+
+r = re.compile("[\x80-\xff]")
+def replaceNonAscii(s):
+    return r.sub('XX', s)
 
 class DataPoint:
     def __init__(self, dataDict):
         self._dataDict = dataDict
         self._altlexLower = None
         self._currParse = None
+
+        for index in (0,1):
+            for wordType in 'words', 'lemmas', 'stems':
+                self._dataDict['sentences'][index][wordType] = \
+                                                             [replaceNonAscii(s) for s in \
+                                                              self._dataDict['sentences'][index][wordType]]
+
+    def shorten(self, prevWindow, n, nextWindow):
+        '''
+        returns a new data point shortened by the given window sizes relative to n
+
+        ie if the sentence starts with "From the beginning"
+        and n=0 and prevWindow=2 and nextWindow=1
+        we return "BOS1 BOS0 From the "
+        '''
+        dataDict = copy.deepcopy(self._dataDict)
+        
+        #need to shorten stems, lemmas, words, pos, set parse to none
+        if 'saved' in dataDict['sentences'][0]:
+            dataDict['sentences'][0] = dataDict['sentences'][0]['saved']
+            dataDict['altlexLength'] = dataDict['sentences'][0]['saved']['altlexLength']
+        else:
+            dataDict['sentences'][0]['saved'] = dataDict['sentences'][0]
+            dataDict['sentences'][0]['saved']['altlexLength'] = dataDict['altlexLength']
+
+        '''
+        keys = {'stems', 'lemmas', 'words', 'pos'}        
+        length = self.currSentenceLength
+        if n-prevWindow < 0:
+            for key in keys:
+                dataDict['sentences'][0][key] = ['BOS'+str(i) for i in range(prevWindow-n)][::-1] + dataDict['sentences'][0][key]
+            n += (prevWindow-n)
+
+        if n+nextWindow >= length:
+            for key in keys:
+                dataDict['sentences'][0][key] = dataDict['sentences'][0][key] + ['EOS'+str(i) for i in range(nextWindow-(length-1-n))]
+
+        for key in keys:
+            dataDict['sentences'][0][key] = dataDict['sentences'][0][key][n-prevWindow:n+nextWindow+1]
+
+        #if dataDict['altlexLength']:
+        dataDict['altlexLength'] = prevWindow+1+nextWindow
+        dataDict['sentences'][0]['parse'] = ''
+        '''
+
+        dataDict['altlexLength'] = n
+        
+        return DataPoint(dataDict)
 
     @property
     def data(self):
@@ -18,6 +73,8 @@ class DataPoint:
 
     @property
     def altlexLength(self):
+        if 'altLexLength' in self._dataDict:
+            self._dataDict['altlexLength'] = self._dataDict['altLexLength']
         return self._dataDict['altlexLength']
 
     @property
@@ -120,6 +177,12 @@ class DataPoint:
 
         return self.currParse
 
+    def getPrevDependencies(self):
+        return self._dataDict['sentences'][1]['dependencies']
+    
+    def getCurrDependencies(self):
+        return self._dataDict['sentences'][0]['dependencies']
+
     def _getAltlex(self, form='words'):
         assert(form in ('words', 'lemmas', 'stems'))
         if self.altlexLength > 0:
@@ -155,3 +218,11 @@ class DataPoint:
                 break
 
         return posInstances
+
+    @property
+    def coherence(self):
+        if 'eg' in self._dataDict:
+            return self._dataDict['eg'][0]
+        else:
+            return None
+        

@@ -22,7 +22,7 @@ before = ['START{}'.format(i) for i in range(4)]
 after = ['END{}'.format(i) for i in range(4)]
 
 starttime = time.time()
-timeout = 60*60*168
+timeout = 60*60*16
 try:
     for s in r.iterFiles():
         sr = SentenceReader(s)
@@ -30,7 +30,7 @@ try:
         for sentence in sr.iterSentences(False):
             stems = before + sentence.stems + after
             for index,stem in enumerate(stems[4:-4]):
-                for sim in stems[index-4:index+4]:
+                for sim in stems[index-4:index+5]:
                     context[stem][sim] += 1
         
         if time.time() - starttime > timeout:

@@ -7,12 +7,16 @@ class MetricsAccumulator:
     def __init__(self, numFolds, graphNames):
         self.numFolds = numFolds
         self.folds = list(range(numFolds)) + ['average']
-        self.graphNames = graphNames
+        self._graphNames = graphNames
         
         self.f_measures = {i:collections.defaultdict(list) for i in self.folds}
         self.accuracies = {i:collections.defaultdict(list) for i in self.folds}
         self.precisions = {i:collections.defaultdict(list) for i in self.folds}
         self.recalls = {i:collections.defaultdict(list) for i in self.folds}
+
+    @property
+    def graphNames(self):
+        return self._graphNames
 
     def add(self,
             foldIndex,

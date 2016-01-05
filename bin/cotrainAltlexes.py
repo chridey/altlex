@@ -63,7 +63,15 @@ parser.add_argument('--load', metavar = 'L',
 parser.add_argument('--save', metavar = 'S',
                     help = 'save the model to a file named S')
 
+parser.add_argument('--config',
+                    help = 'JSON config file to use instead of command line options')
+
 args = parser.parse_args()
+
+#start with the config file options, but allow them to be overwritten by command line
+if args.config:
+    with open(args.config) as f:
+        config.setParams(json.load(f))
 
 handler = CotrainingDataHandler(args.limit,
                                 args.unlabeled)
@@ -76,11 +84,12 @@ featureSubsets = (
 if args.selftrain:
     featureSubsets = tuple(itertools.chain(*featureSubsets)),
     cotrainer = SelfTrainer(config.classifiers[args.classifier])
+    metrics = MetricsAccumulator(args.numFolds,
+                                 featureSubsets)
 else:
     cotrainer = Cotrainer(config.classifiers[args.classifier])
-
-metrics = MetricsAccumulator(args.numFolds,
-                             list(featureSubsets) + ['combined'])
+    metrics = MetricsAccumulator(args.numFolds,
+                                 featureSubsets + ('combined',))
 
 if args.load:
     handler.loadJSON(args.load)
@@ -107,23 +116,21 @@ try:
         
         print('iteration {}'.format(i))
         
-        combinedTesting = []
-
         for foldIndex, (training, testing) in enumerate(handler.iterData()):
             untaggedData = handler.cotrainingData(foldIndex)
             remainingSample = handler.samplingData(foldIndex)
         
-            print('training is {}'.format(len(training)))
-            print('testing is {}'.format(len(testing)))
-            print('untagged is {}'.format(len(untaggedData)))
+            print('training is {}'.format(len(training[0])))
+            print('testing is {}'.format(len(testing[0])))
+            print('untagged is {}'.format(len(untaggedData[0])))
             print('remaining sample is {}'.format(len(remainingSample)))
                       
             newTaggedData, remainingUntaggedData = cotrainer.train(training,
                                                                    untaggedData,
                                                                    args.positive,
                                                                    args.negative)
-            print(len(newTaggedData))
-            print(len(remainingUntaggedData))
+            #print(len(newTaggedData))
+            #print(len(remainingUntaggedData))
             
             #add new tagged data to training
             handler.updateTaggedData(newTaggedData, foldIndex)
@@ -144,23 +151,23 @@ try:
                             cotrainer.classifiers[featureIndex],
                             #newTesting[featureIndex])
                             testing[featureIndex])
-                
-            combinedTesting.append(testing)
 
-            try:
-                metrics.add(foldIndex,
-                            'combined',
-                            cotrainer,
-                            testing)
-            except NotProbabilistic as np:
-                continue
+            if 'combined' in metrics.graphNames:
+                try:
+                    metrics.add(foldIndex,
+                                'combined',
+                                cotrainer,
+                                testing)
+                except NotProbabilistic as np:
+                    continue
 
         for featureIndex in range(len(featureSubsets)):
             metrics.average(featureSubsets[featureIndex],
                             i,
                             cotrainer.classifiers[featureIndex])
 
-        metrics.average('combined', i, cotrainer)
+        if 'combined' in metrics.graphNames:
+            metrics.average('combined', i, cotrainer)
 
         i+=1
         
@@ -168,8 +175,8 @@ try:
 #print(accuracies)
 except KeyboardInterrupt:
     print('Terminating on keyboard interrupt')
-#except Exception as e:
-#    print('Terminating on unknown exception {}'.format(e))
+except Exception as e:
+    print('Terminating on unknown exception {}'.format(e))
 
 #plt.plot(range(len(f_measures[0][0])), f_measures[0][0], 'r',
 #         range(len(f_measures[0][1])), f_measures[0][1], 'g',
@@ -178,8 +185,13 @@ except KeyboardInterrupt:
 
 print(metrics.f_measures)
 metrics.plotFmeasure()
-metrics.savePlot('cotrain_{}_{}_{}_{}_{}.png'.format(args.classifier,
-                                                     args.positive,
-                                                     args.negative,
-                                                     args.unlabeled,
-                                                     args.numFolds))
+
+learningType = 'cotrain'
+if args.selftrain:
+    learningType = 'selftrain'
+metrics.savePlot('{}_{}_{}_{}_{}_{}.png'.format(learningType,
+                                                args.classifier,
+                                                args.positive,
+                                                args.negative,
+                                                args.unlabeled,
+                                                args.numFolds))

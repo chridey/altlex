@@ -1,0 +1,39 @@
+{'curr_length_post_altlex': False, 'final_time': True, 'head_verb_altlex': True, 'theme_role_prev': False, 'prev_length': False, 'marker_cosine': False, 'verbnet_class_curr': True, 'productions': False, 'curr_length': False, 'altlex_verbs': False, 'noun_intersection': False, 'noun_cat_prev': False, 'hedging': False, 'first_pos': False, 'verbnet_class_prev': True, 'cosine': False, 'altlex_pos': True, 'altlex_length': True, 'self_category': True, 'altlex_marker': True, 'right_siblings': True, 'altlex_stem': True, 'theme_role_altlex': False, 'parent_category': False, 'reporting': False, 'head_verb_prev': True, 'has_copula': True, 'final_reporting': True, 'wtmf': False, 'head_verb_curr': True, 'altlex_nouns': False, 'noun_cat_altlex': True, 'intersection': False, 'verbnet_class_altlex': False, 'noun_similarity': False, 'final_example': False, 'prev_stem': False, 'svd': True, 'altlex_productions': False, 'coref': True, 'theme_role_curr': False, 'framenet': True, 'curr_stem': False, 'noun_cat_curr': False}
+(12, 769543)
+(12, 12)
+*
+optimization finished, #iter = 706
+obj = -5121.217465, rho = -1.314826
+nSV = 656, nBSV = 567
+Total nSV = 656
+[LibSVM]42 157 34 13
+*
+optimization finished, #iter = 775
+obj = -4823.727573, rho = -1.063339
+nSV = 632, nBSV = 537
+Total nSV = 632
+[LibSVM]37 150 41 17
+*
+optimization finished, #iter = 752
+obj = -5222.488596, rho = 0.062599
+nSV = 670, nBSV = 582
+Total nSV = 670
+[LibSVM]37 161 30 17
+*
+optimization finished, #iter = 751
+obj = -5249.064630, rho = -0.739803
+nSV = 664, nBSV = 581
+Total nSV = 664
+[LibSVM]42 148 42 12
+
+              Accuracy: 0.7897650463624074
+              True precision: 0.519807339819123
+              True recall: 0.7279461279461279
+              True F-measure: 0.6065168321704033
+              
+*
+optimization finished, #iter = 818
+obj = -3885.102042, rho = 0.114728
+nSV = 476, nBSV = 383
+Total nSV = 476
+[LibSVM]

@@ -53,6 +53,7 @@ for dp,tag in training:
         if args.printSentence:
             sentences = dp.getSentences()
             altlexLookup[altlex].append(sentences)
+
         if tag:
             causalCounts[altlex] += 1
         if search:
@@ -67,3 +68,4 @@ for s in sorted(counts, key=counts.get):
         for i in altlexLookup[s]:
             print('\t', i)
 
+print("Total causal: {}".format(sum(causalCounts.values())))

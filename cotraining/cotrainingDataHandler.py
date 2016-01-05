@@ -21,11 +21,11 @@ def zipDataForCotraining(data):
 def unzipDataForCotraining(data):
     features, labels = zip(*data)
     if type(features[0]) == dict:
-        return data
+        return [data]
     
     features1, features2 = zip(*features)
-    return (list(zip(features1, labels)),
-            list(zip(features2, labels)))
+    return [list(zip(features1, labels)),
+            list(zip(features2, labels))]
 
 class CotrainingDataHandler:
     def __init__(self,
@@ -77,7 +77,7 @@ class CotrainingDataHandler:
 
         #add these to some lookup table, blah blah
         for training, testing in iterFolds(evaluation,
-                                           n_folds=self.numFolds):
+                                            n_folds=self.numFolds):
             self.taggedData.append({'training': unzipDataForCotraining(training),
                                     'testing': unzipDataForCotraining(testing)})
 

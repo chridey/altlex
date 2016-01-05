@@ -125,11 +125,12 @@ def extractParse(phrase, parse, getSiblings=True):
                     if getSiblings == False:
                         return pos
 
-    if not found:
+    if not found or sibling is None:
         return None
 
     #now add anything with the same length that occurs after this phrase
     #sibling needs to occur at same level of tree but also have same parent node
+    
     siblings.append(parse[sibling])
     for pos in parse.treepositions('preorder'): #subtrees():
         if pos > sibling and pos[:-1] == sibling[:-1]: # and len(pos) == len(sibling):
@@ -138,17 +139,190 @@ def extractParse(phrase, parse, getSiblings=True):
             
     return siblings
 
+'''
 def extractRightSiblings(phrase, parse):
     siblings = extractParse(phrase, parse)
     if siblings is None:
         return []
     return [s.label() for s in siblings]
+'''
 
+def getRightSiblings(endIndex, parse):
+
+    index = 0
+    sibling = ['']
+    origParse = parse
+    #print(start, end)
+    while index < len(origParse.leaves()):
+        #print(index, parse.leaves(), sibling)
+        if index >= endIndex:
+            return sibling 
+        #if endIndex >= index + len(parse.leaves()) and len(parse) == 1:
+        #    return None
+        #figure out which subtree to traverse
+        for i in range(len(parse)):
+            #print(i, index, len(parse[i].leaves()))
+
+            if type(parse[i]) != nltk.tree.Tree:
+                print('Problem with getRightSiblings at {},{}: {}'.format(index, i, origParse))
+                return [None]
+            
+            #this means the end of phrase lies in this subtree
+            if index + len(parse[i].leaves()) >= endIndex:
+                #print(True, len(parse))
+                if index + len(parse[i].leaves()) == endIndex and len(parse[i].leaves()) == 1:
+                    index += len(parse[i].leaves())
+                sibling = [p.label() for p in parse[i+1:]] if i < len(parse) - 1 else ['']
+                parse = parse[i]
+                break
+            index += len(parse[i].leaves())
+    return [None]
+
+def getLeftSiblings(startIndex, parse):
+    if startIndex == 0:
+        return ['0']
+    node = parse.leaf_treeposition(startIndex)[:-1]
+    siblings = ['']
+    while len(node) > 0 and parse[node].leaves()[0] == parse.leaves()[startIndex]:
+        current = list(node)
+        siblings = []
+        for i in range(node[-1]):
+            current[-1] = i
+            siblings.append(parse[current].label())
+        node = node[:-1]
+    return siblings
+
+def findPhrase(phrase, source):
+    try:
+        start = [source[i:i+len(phrase)] for i in range(len(source))].index(phrase)
+    except ValueError:
+        return None
+    return start
+
+'''
+def getRightSiblings(index, parse):
+    indices = parse.leaf_treeposition(index)
+
+    if indices[-2] < len(parse[indices[:-2]]):
+        ret = []
+        current = list(indices[:-1])
+        for i in range(indices[-2]+1, len(parse[indices[:-2]])):
+            current[-1] = i
+            print(current)
+            ret += [parse[current].label()]
+        return ret
+    return ['']
+
+'''
+def extractRightSiblings(phrase, parse):
+    start = findPhrase(phrase, parse.leaves())
+    if start is None:
+        return [None]
+    return getRightSiblings(start + len(phrase),
+                            parse)
+
+def extractLeftSiblings(phrase, parse):
+    pass
+
+def getConnectives(parse,
+                   maxLen=7,
+                   content=('VB', 'NN', 'RB', 'JJ'),
+                   validLeftSiblings=('V', 'N', 'S'),
+                   validRightSiblings=('V', 'N', 'S'),                   
+                   blacklist=(),
+                   whitelist=(),
+                   pos=None,
+                   leaves=None,
+                   verbose=False):
+
+    '''
+    find the shortest non-subset phrases that satisfy all conditions
+
+    blacklist - disallow these exact phrases (they also dont count as content words)
+    whitelist - allow these exact phrases regardless of the P-O-S in content
+    '''
+
+    ret = []
+    if pos is None:
+        pos = list(zip(*parse.pos()))[1]
+    if leaves is None:
+        leaves = parse.leaves()
+    
+    leftSiblings = []
+    rightSiblings = []
+    for i in range(len(leaves)):
+        leftSiblings.append(getLeftSiblings(i, parse))
+        rightSiblings.append(getRightSiblings(i, parse))
+        
+    for length in range(1, maxLen+1):
+        for i in range(len(leaves)-length):
+            ls = leftSiblings[i] #getLeftSiblings(i, parse) #
+            rs = rightSiblings[i+length] #getRightSiblings(i+length, parse) #
+            phrase = leaves[i:i+length]
+            if verbose:
+                print(i, i+length, phrase, ls, rs)
+
+            if (any(set(item).issubset(leaves[i:i+length]) for item in whitelist) or \
+               (not tuple(leaves[i:i+length]) in blacklist and 
+            any (pos[x][:2] in content and (leaves[x],) not in blacklist for x in range(i, i+length)))) and \
+            len(ls) and any(x and x[0] in validLeftSiblings for x in ls) and \
+            len(rs) and any(x and x[0] in validRightSiblings for x in rs):
+
+                if not any(findPhrase(leaves[p[0]:p[1]], phrase) is not None for p in ret):
+                    ret.append((i,i+length))
+                
+    return ret
+
+
+def getConnectives2(parse,
+                    content=('VB', 'NN', 'RB', 'JJ'),
+                    siblings=('V', 'N', 'S'),
+                    blacklist=(),
+                    pos=None,
+                    verbose=False):
+    '''
+    find the shortest non-overlapping phrases that satisfy all conditions
+    '''
+    
+    ret = []
+    if pos is None:
+        pos = list(zip(*parse.pos()))[1]
+
+    hasContent = False
+    currPhrase = []
+    for i in range(len(parse.leaves())):
+        ls = getLeftSiblings(i, parse)
+        rs = getRightSiblings(i+1, parse)
+
+        if len(currPhrase) or (len(ls) and any(x and x[0] in siblings for x in ls)):
+            currPhrase.append(parse.leaves()[i])
+        if len(currPhrase) and parse.leaves()[i] not in blacklist and pos[i][:2] in content:
+            hasContent = True
+        print(i, parse.leaves()[i], ls, rs, hasContent, currPhrase)
+        if len(currPhrase) and hasContent and (len(rs) and any(x and x[0] in siblings for x in rs)):
+            ret.append(currPhrase)
+            hasContent = False
+            currPhrase = []
+    return ret
+
+def getParentNodes(index, parse):
+    indices = parse.leaf_treeposition(index)
+    return [parse[indices[:i+1]].label() for i in range(len(indices)-1)]
+
+def extractParentNodes(phrase, parse):
+    start = findPhrase(phrase, parse.leaves())
+    if start is None:
+        return [None]
+
+    return getParentNodes(start + len(phrase) - 1,
+                          parse)
+    
 def _extractSelfCategoryIndex(phrase, parse):
     treeIndex = extractParse(phrase, parse, False)
 
     if treeIndex is None:
-        print('cant find {} in {}'.format(phrase, parse))
+        if DEBUG:
+            print('cant find {} in {}'.format(phrase, parse))
         return None
     
     #iteratively check if parent node contains the entire phrase and only the phrase
@@ -181,3 +355,17 @@ def extractParentCategory(phrase, parse):
 
     return parse[catIndex[:-1]].label()
     
+def treesFromString(string):
+    trees = []
+    treeString = ''
+    for line in string.split('\n'):
+        if not line:
+            continue
+        if line.startswith('('):
+            if treeString:
+                trees.append(nltk.Tree.fromstring(treeString))
+            treeString = ''
+        treeString += line
+    if treeString:
+        trees.append(nltk.Tree.fromstring(treeString))
+    return trees
