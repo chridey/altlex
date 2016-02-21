@@ -1,10 +1,11 @@
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.naive_bayes import BernoulliNB
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.svm import SVC
-from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC, LinearSVC
+from sklearn.linear_model import LogisticRegression, SGDClassifier
+from sklearn.neural_network import MLPClassifier
 
-from chnlp.ml.gridSearch import GridSearchSVM, GridSearchLogit, GridSearchSGD, GridSearchLabelSpreader,GridSearchPipeline
+from chnlp.ml.gridSearch import GridSearch,GridSearchSVM, GridSearchLogit, GridSearchSGD, GridSearchLabelSpreader,GridSearchPipeline
 
 from chnlp.ml.tfkld import TfkldFactorizer
 
@@ -17,7 +18,8 @@ from chnlp.mixture.mixtureClient import MixtureClient
 try:
     from chnlp.ml.rnnLearner import RNNLearner
 except ImportError:
-    RNNLearner = None    
+    RNNLearner = None
+
 #####
     
 import chnlp.altlex.featureExtractor as fe
@@ -57,14 +59,20 @@ class Config:
                 self.params['features']['fixed'][f] = True
             else:
                 self.params['features']['fixed'][f] = False
-
+        for f in features:
+            self.params['features']['fixed'][f] = True
+            
     @property
     def classifiers(self):
         return {'random_forest': RandomForestClassifier,
                 'naive_bayes': BernoulliNB,
                 'ada_boost': AdaBoostClassifier,
                 'svm': SVC,
+                'linear_svm': LinearSVC,
+                'sgd': SGDClassifier,
+                'mlp': MLPClassifier,
                 'logistic_regression': LogisticRegression,
+                'grid_search': GridSearch,
                 'grid_search_svm': GridSearchSVM,
                 'grid_search_logistic_regression': GridSearchLogit,
                 'grid_search_sgd': GridSearchSGD,
@@ -96,6 +104,8 @@ class Config:
                                       ),
                 'naive_bayes': {},
                 'ada_boost': dict(n_estimators=500),
+                'sgd': {},
+                'mlp': {},
                 'svm': dict(verbose=True,
                             #kernel='poly',
                             #C=10, gamma=1)
@@ -103,7 +113,9 @@ class Config:
                             #C=.01)
                             C=10),
                             #degree=3),
+                'linear_svm': {},
                 'logistic_regression': dict(C=.1),
+                'grid_search': {},
                 'grid_search_svm': {},
                 'grid_search_logistic_regression': {},
                 'grid_search_sgd': {},
@@ -138,11 +150,13 @@ class Config:
         assert('experimental' in params['features'])
         assert('fixed' in params['features'])
 
+        preprocessed = params.get('preprocessed', {})
+
         for feature in params['features']['experimental']:
-            assert(feature in self.featureExtractor.validFeatures)
+            assert(feature in self.featureExtractor.validFeatures or feature in preprocessed)
 
         for feature in params['features']['fixed']:
-            assert(feature in self.featureExtractor.validFeatures)
+            assert(feature in self.featureExtractor.validFeatures or feature in preprocessed)
 
     @property
     def classifier(self):

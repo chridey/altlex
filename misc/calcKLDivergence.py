@@ -11,7 +11,9 @@ import operator
 from chnlp.utils.utils import makeNgrams, balance
 from chnlp.misc import wikipedia, wiknet
 from chnlp.ml.tfkld import KldTransformer, TfkldFactorizer
-from chnlp.utils.treeUtils import extractRightSiblings, extractParentNodes, getConnectives
+
+from chnlp.utils import wordUtils
+from chnlp.utils.treeUtils import extractRightSiblings, extractParentNodes, getConnectives, getConnectives2
 
 import nltk
 
@@ -200,12 +202,21 @@ def getNgrams(pairs, maxLen=7):
             if s > 0:
                 validLeftSiblings = ('V', 'N', 'S', '0')
 
+            '''
             ret = getConnectives(parse,
                                  maxLen,
                                  validLeftSiblings=validLeftSiblings,
-                                 blacklist = {tuple(k.split()) for k in modal_auxiliary},
-                                 whitelist = all_markers,
+                                 blacklist = {tuple(k.split()) for k in wordUtils.modal_auxiliary},
+                                 whitelist = wordUtils.all_markers,
                                  leaves = lemmas)
+            '''
+            
+            ret = getConnectives2(parse,
+                                  validLeftSiblings=validLeftSiblings,
+                                  blacklist = {tuple(k.split()) for k in wordUtils.modal_auxiliary},
+                                  whitelist = wordUtils.all_markers,
+                                  leaves = lemmas)
+            
             pos = list(list(zip(*parse.pos()))[1])
             for t in ret:
                 ngrams[i].append(lemmas[t[0]:t[1]] + pos[t[0]:t[1]])
@@ -363,7 +374,7 @@ def main(iterator, withNoS1=True, withS1=True, prefix=''):
                'total': 0}
               }
 
-    for filename,stems1,stems2 in iterator:
+    for filename,stems1,stems2,weighting in iterator:
         if filename not in counts:
             counts[filename] = {'in_s1': collections.defaultdict(int),
                                 'in_s2': collections.defaultdict(int),
@@ -372,9 +383,11 @@ def main(iterator, withNoS1=True, withS1=True, prefix=''):
                          
         #count all the words that appear on the right side that don't appear on the left
         for stem in stems2-stems1:
-            counts[filename]['in_s2_not_in_s1'][stem] += 1
-            counts['all']['in_s2_not_in_s1'][stem] += 1    
-
+            counts[filename]['in_s2_not_in_s1'][stem] += weighting(filename, stem)
+            counts[filename]['in_s1'][stem] += (1-weighting(filename, stem))
+            counts['all']['in_s2_not_in_s1'][stem] += weighting(filename, stem) ##correct weighting?
+            counts['all']['in_s1'][stem] += (1-weighting(filename, stem))
+            
         #count the total number of times each word appears on the left side and subtract from the total documents later
         for stem in stems1:
             counts[filename]['in_s1'][stem] += 1
@@ -416,224 +429,12 @@ def main(iterator, withNoS1=True, withS1=True, prefix=''):
 def mainstar(settings):
     return main(*settings)
 
-'''
-accordingly|5|
-as a result|78|
-because|858|
-consequently|10|
-hence|4|
-now that|20|2
-so|263|
-so that|31|
-thereby|12|
-therefore|26|
-thus|112|
-'''
-#{('because',), ('therefore',), ('thus',), tuple('as a result'.split())} #{(stemmer.stem('because'),)}
-
-causal_markers = set(tuple(i.split()) for i in '''accordingly
-as a consequence
-as a result
-because
-consequently
-hence
-in response
-so IN
-so that
-subsequently
-thereby
-therefore
-thus
-to this end'''.split('\n'))
-
-noncausal_markers = set(tuple(i.split()) for i in '''additionally
-afterward
-also
-alternatively
-although
-as an alternative
-as if
-as soon as
-as though
-as well
-before
-before and after
-besides
-but
-by comparison
-by contrast
-conversely
-earlier
-either or
-except
-finally
-for example
-for instance
-further
-furthermore
-however
-in addition
-in contrast
-in fact
-in other words
-in particular
-in the end
-instead
-later
-likewise
-meantime
-meanwhile
-moreover
-much as
-neither nor
-nevertheless
-next
-nonetheless
-nor
-on the contrary
-on the other hand
-otherwise
-overall
-previously
-rather
-separately
-similarly
-simultaneously
-specifically
-still
-thereafter
-though
-till
-unless
-whereas
-while
-yet'''.split('\n'))
-
-all_markers = set(tuple(i.split()) for i in '''accordingly
-additionally
-after
-afterwards
-also
-although
-and
-as
-as a consequence
-as a matter of fact
-as a result
-as it turns out
-at that time
-at the same time
-at the time
-because
-before
-besides
-but
-by comparison
-by contrast
-consequently
-earlier
-even though
-eventually
-ever since
-finally
-first
-for
-for example
-for instance
-for one
-for one thing
-further
-furthermore
-hence
-however
-in addition
-in comparison
-in contrast
-in fact
-in other words
-in particular
-in response
-in return
-in short
-in sum
-in summary
-in the end
-in the meantime
-in turn
-inasmuch as
-incidentally
-indeed
-insofar as
-instead
-later
-likewise
-meanwhile
-moreover
-nevertheless
-next
-nonetheless
-now
-on the contrary
-on the one hand
-on the other hand
-on the whole
-or
-overall
-particularly
-plus
-previously
-rather
-regardless
-second
-separately
-similarly
-simultaneously
-since
-since then
-so
-so far
-so that
-soon
-specifically
-still
-subsequently
-that be
-then
-thereafter
-therefore
-third
-though
-thus
-to this end
-ultimately
-what be more
-when
-whereas
-while
-yet'''.split('\n'))
-
-
-
-modal_auxiliary = set('''be
-can
-could
-dare
-do
-have
-may
-might
-must
-need
-ought
-shall
-should
-will
-would'''.split('\n'))
-
 def getCausalPhrases(phrases, seedSet, stem=True):
     #build the table to look up the phrases in the pairs that have causal relations in them
     causalPhrases = {'causal': set(),
                      'notcausal': set()}
+    causalPhrases = {i:set() for i in seedSet.keys()}
+    
     if stem:
         stemmedSeedSet = {i:[set(map(stemmer.stem, j)) for j in seedSet[i]] for i in seedSet}
     else:
@@ -649,8 +450,10 @@ def getCausalPhrases(phrases, seedSet, stem=True):
                 for paraphrase in phrases[phrase]:
                     causalPhrases[i].add(tuple(paraphrase.split()))
 
-    print(len(causalPhrases['causal']),
-          len(causalPhrases['notcausal']))
+    #print(len(causalPhrases['causal']),
+    #      len(causalPhrases['notcausal']))
+    for i in causalPhrases.keys():
+        print(len(causalPhrases[i]))
     return causalPhrases
 
 def trainAndClassifyPhrases(iterator, kldt, verbose=False):
@@ -807,8 +610,8 @@ if __name__ == '__main__':
         
         k = 10
         n = 10
-        seedSet = {'causal': causal_markers,
-                   'notcausal': noncausal_markers}
+        seedSet = {'causal': wordUtils.causal_markers,
+                   'notcausal': wordUtils.noncausal_markers}
         print(seedSet)
         for i in range(k):
             print(i)

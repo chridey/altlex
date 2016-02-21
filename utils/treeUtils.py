@@ -1,3 +1,5 @@
+import itertools
+
 import nltk
 
 #try replacing noun phrases with just generic NP
@@ -9,6 +11,25 @@ import nltk
 #try NER
 
 DEBUG = 0
+
+altlexPatterns = {
+    4:
+    [[('TO','IN'), ('DT','WDT','PRP$','PDT'), ('NN', 'NNS'),  ('TO','IN','WDT','WP','WRB')]],
+    3:
+    [[('TO','IN'), ('DT','WDT','PRP$','PDT'), ('NN', 'NNS')],
+     [('TO','IN'), ('NN', 'NNS'),  ('TO','IN','WDT','WP','WRB')]],
+    2:
+    [[('TO','IN'), ('NN', 'NNS')],
+     [('NN', 'NNS'),  ('TO','IN','WDT','WP','WRB')],
+     [('VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ'), ('TO','IN','WDT','WP','WRB')],
+     [('JJ', 'JJR', 'JJS'), ('TO','IN','WDT','WP','WRB')]],
+    1:
+    [[('NN', 'NNS')],
+     [('VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ')],
+     [('JJ', 'JJR', 'JJS')],
+     [('RB', 'RBR', 'RBS')]]
+}
+altlexPatternSet = set(itertools.chain(*((itertools.product(*j)) for i in altlexPatterns for j in altlexPatterns[i])))
 
 def extractAltlex(parse, found=False, preceding='', current=''):
     #need way of breaking out of recursion and returning result
@@ -224,9 +245,106 @@ def extractRightSiblings(phrase, parse):
 def extractLeftSiblings(phrase, parse):
     pass
 
+def getConnectivesPatterns(parse,
+                           validRightSiblings=frozenset(('V', 'N', 'S')),                   
+                           blacklist=(),
+                           whitelist=(),
+                           pos=None,
+                           leaves=None,
+                           verbose=False):
+
+    ret = []
+    if pos is None:
+        pos = list(zip(*parse.pos()))[1]
+    if leaves is None:
+        leaves = parse.leaves()
+
+    rightSiblings = []
+    for i in range(len(leaves)):
+        rightSiblings.append({i[:1] for i in getRightSiblings(i, parse) if i is not None})
+
+    #first go through the whitelist and find any phrases that match and also satisfy
+    #the valid right siblings
+    foundIndices = set()
+    for length in list(range(1, max(len(i) for i in whitelist)+1))[::-1]:
+        #go through from longest to shortest
+        #only add shorter phrases if they do not overlap with a longer phrase
+        for i in range(len(leaves)-length):
+            rs = rightSiblings[i+length]
+            if rs & validRightSiblings and tuple(leaves[i:i+length]) in whitelist and not set(range(i,i+length)) & foundIndices:
+                foundIndices.update(range(i,i+length))
+                ret.append((i,i+length))
+                
+    #then go through the patterns longest to shortest
+    #disallow any patterns that contain any phrases in the blacklist
+    for length in list(range(1, max(altlexPatterns)+1))[::-1]:
+        #go through from longest to shortest
+        #only add shorter phrases if they do not overlap with a longer phrase
+        for i in range(len(leaves)-length):
+            rs = rightSiblings[i+length]
+            if rs & validRightSiblings and tuple(pos[i:i+length]) in altlexPatternSet and not set(range(i,i+length)) & foundIndices and not set(leaves[i:i+length]) in blacklist:
+                foundIndices.update(range(i,i+length))
+                ret.append((i,i+length))
+
+    return ret
+
+def getConnectives2(parse,
+                    maxLen=4,
+                    content=('VB', 'NN', 'RB', 'JJ'),
+                    invalid=frozenset(('NNP', 'NNPS', 'SYM', ',', '(', ')', '"', "'", ';')),
+                    validRightSiblings=frozenset(('V', 'N', 'S')),
+                    validLeftSiblings=frozenset(('V', 'N', 'S')),
+                    blacklist=(),
+                    whitelist=(),
+                    pos=None,
+                    leaves=None,
+                    verbose=False):
+
+    ret = []
+    if pos is None:
+        pos = list(zip(*parse.pos()))[1]
+    if leaves is None:
+        leaves = parse.leaves()
+
+    leftSiblings = []
+    rightSiblings = []
+    for i in range(len(leaves)):
+        rightSiblings.append({i[:1] for i in getRightSiblings(i, parse) if i is not None})
+        leftSiblings.append({i[:1] for i in getLeftSiblings(i, parse) if i is not None})
+        
+    #first go through the whitelist and find any phrases that match and also satisfy
+    #the valid right siblings
+    foundIndices = set()
+    for length in list(range(1, max(len(i) for i in whitelist)+1))[::-1]:
+        #go through from longest to shortest
+        #only add shorter phrases if they do not overlap with a longer phrase
+        for i in range(len(leaves)-length):
+            ls = leftSiblings[i]
+            rs = rightSiblings[i+length]
+            if ls & validLeftSiblings and rs & validRightSiblings and (tuple(leaves[i:i+length]) in whitelist or length == 1 and leaves[i] == 'so' and pos[i] == 'IN') and not set(range(i,i+length)) & foundIndices:
+                foundIndices.update(range(i,i+length))
+                ret.append((i,i+length))
+
+    #then go through the patterns longest to shortest
+    #disallow any patterns that contain any phrases in the blacklist
+    for length in list(range(1, maxLen+1))[::-1]:
+        #go through from longest to shortest
+        #only add shorter phrases if they do not overlap with a longer phrase
+        for i in range(len(leaves)-length):
+            ls = leftSiblings[i]
+            rs = rightSiblings[i+length]
+            if rs & validRightSiblings and \
+            ls & validLeftSiblings and \
+            tuple(pos[i:i+length]) in altlexPatternSet and not set(range(i,i+length)) & foundIndices and not set(leaves[i:i+length]) in blacklist:
+                foundIndices.update(range(i,i+length))
+                ret.append((i,i+length))
+
+    return ret
+
 def getConnectives(parse,
                    maxLen=7,
                    content=('VB', 'NN', 'RB', 'JJ'),
+                   invalid=('NNP', 'NNPS'), #, 'SYM', ',', '(', ')', '"', "'", ';'),
                    validLeftSiblings=('V', 'N', 'S'),
                    validRightSiblings=('V', 'N', 'S'),                   
                    blacklist=(),
@@ -247,6 +365,7 @@ def getConnectives(parse,
         pos = list(zip(*parse.pos()))[1]
     if leaves is None:
         leaves = parse.leaves()
+    invalid = set(invalid)
     
     leftSiblings = []
     rightSiblings = []
@@ -262,7 +381,8 @@ def getConnectives(parse,
             if verbose:
                 print(i, i+length, phrase, ls, rs)
 
-            if (any(set(item).issubset(leaves[i:i+length]) for item in whitelist) or \
+            if not len(set(pos[i:i+length]) & invalid) and \
+                   (any(set(item).issubset(leaves[i:i+length]) for item in whitelist) or \
                (not tuple(leaves[i:i+length]) in blacklist and 
             any (pos[x][:2] in content and (leaves[x],) not in blacklist for x in range(i, i+length)))) and \
             len(ls) and any(x and x[0] in validLeftSiblings for x in ls) and \
@@ -271,38 +391,6 @@ def getConnectives(parse,
                 if not any(findPhrase(leaves[p[0]:p[1]], phrase) is not None for p in ret):
                     ret.append((i,i+length))
                 
-    return ret
-
-
-def getConnectives2(parse,
-                    content=('VB', 'NN', 'RB', 'JJ'),
-                    siblings=('V', 'N', 'S'),
-                    blacklist=(),
-                    pos=None,
-                    verbose=False):
-    '''
-    find the shortest non-overlapping phrases that satisfy all conditions
-    '''
-    
-    ret = []
-    if pos is None:
-        pos = list(zip(*parse.pos()))[1]
-
-    hasContent = False
-    currPhrase = []
-    for i in range(len(parse.leaves())):
-        ls = getLeftSiblings(i, parse)
-        rs = getRightSiblings(i+1, parse)
-
-        if len(currPhrase) or (len(ls) and any(x and x[0] in siblings for x in ls)):
-            currPhrase.append(parse.leaves()[i])
-        if len(currPhrase) and parse.leaves()[i] not in blacklist and pos[i][:2] in content:
-            hasContent = True
-        print(i, parse.leaves()[i], ls, rs, hasContent, currPhrase)
-        if len(currPhrase) and hasContent and (len(rs) and any(x and x[0] in siblings for x in rs)):
-            ret.append(currPhrase)
-            hasContent = False
-            currPhrase = []
     return ret
 
 def getParentNodes(index, parse):

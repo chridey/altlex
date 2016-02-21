@@ -6,10 +6,11 @@ import json
 
 from nltk.stem.porter import PorterStemmer
 from nltk.stem.wordnet import WordNetLemmatizer
-from nltk import sent_tokenize,word_tokenize
+from nltk import sent_tokenize,word_tokenize,pos_tag
 
 from chnlp.utils.treeUtils import treesFromString
 from chnlp.utils import wordUtils
+from chnlp.utils import treeUtils
 
 #also POS
 
@@ -25,8 +26,15 @@ if __name__ == '__main__':
     parser.add_argument('--train', default='2,22')
     parser.add_argument('--test', default='23,24')
     parser.add_argument('--explicit', action='store_true')
+    parser.add_argument('--altlexes')
     args = parser.parse_args()
 
+    altlexes = None
+    if args.altlexes:
+        with open(args.altlexes) as f:
+            altlexes = {tuple(i.split()) for i in f.read().splitlines()}
+            #print(sorted(altlexes)[:10])
+            
     stemmer = PorterStemmer()
     lemmatizer = WordNetLemmatizer()
 
@@ -50,6 +58,19 @@ if __name__ == '__main__':
                 print(f)
                 with open(os.path.join(wsjDir, f)) as wsjfp:
                     wsj = wsjfp.read()
+                startIndices = {}
+                endIndices = {}
+                counter = 0
+                index = 0
+                for line in wsj.splitlines():
+                    if not line or line.startswith('.START'):
+                        continue
+                    for j in range(counter,counter+len(line)):
+                        startIndices[j] = index
+                        endIndices[j] = index
+                    counter += len(line)
+                    index += 1
+                    
                 if os.path.exists(os.path.join(currDir, f) + '.pipe'):
                     #read in PTB trees
                     with open(os.path.join(ptbDir, f) + '.prd') as ptbfp:
@@ -103,49 +124,98 @@ if __name__ == '__main__':
                                     ends[1] = attrEnd
 
                             startIndex = min(starts)
-                            sentences = [wsj[starts[1]:ends[1]+1],
-                                         wsj[starts[0]:ends[0]+1]]
+                            sentences = [wsj[starts[0]:ends[0]+1],
+                                         wsj[starts[1]:ends[1]+1]]
 
                             #if attrSpan:
                                 #print(sentences)
                             sentenceInfo = [None, None]
 
-                            #TODO: this wont match up
-                            pos = zip(*trees[index].pos())
+                            #print(starts, startIndices[starts[0]], startIndices[starts[1]])
+                            tree = [trees[startIndices[starts[0]]]]
+                            tree.append(trees[startIndices[starts[1]]])
+                            '''
+                            print(sentences[0] ,sentences[1])
+                            print(tree[0])
+                            print(tree[1])
+                            pos = tree[0].pos()
+                            if tree[0] != tree[1]:
+                                pos += tree[1].pos()
                             print(pos)
-                            pos = pos[1]
-                            start = 0
+                            '''
+                            
                             for i,s in enumerate(sentences):
                                 words = word_tokenize(s)
                                 sentenceInfo[i] = {'words': words}
-                                sentenceInfo[i]['pos'] = pos[start:start+len(words)]
-                                print(words, sentenceInfo[i]['pos'])
+                                try:
+                                    sentenceInfo[i]['pos'] = list(zip(*pos_tag(words))[1]) #pos[start:start+len(words)]
+                                except UnicodeDecodeError:
+                                    sentenceInfo[i]['pos'] = [None]*len(words)
+                                #print(words, sentenceInfo[i]['pos'])
                                 sentenceInfo[i]['lemmas'] = wordUtils.lemmatize(words, sentenceInfo[i]['pos'])
                                 sentenceInfo[i]['stems'] = [stemmer.stem(j.decode('latin-1')).lower() for j in words]
-                                start += len(words)
-                            assert(len(pos) == start)
+                                #start += len(words)
+                            #print(len(pos), start)
+                            #assert(len(pos) == start)
 
-                            if any('Contingency' in i for i in classes):
+                            if any('Contingency.Cause' in i for i in classes):
                                 tag = 'causal'
                             else:
                                 tag = 'notcausal'
 
-                            #data[3] = connective span and is always contained within a sentence
-                            if data[3]:
-                                connectiveStart = int(min(rangeRe.split(data[3]), key=int))
-                                connectiveEnd = int(max(rangeRe.split(data[3]), key=int))
-                            else:
-                                connectiveEnd = None
-                                connectiveStart = None
+                            if altlexes is not None:
+                                #try to match the words in the sentences to their trees
+                                counter = 0
+                                treeWords = tree[1].leaves()
+                                treePos = zip(*(tree[1].pos()))[1]
+                                newPos = []
+                                for wordIndex,word in enumerate(treeWords):
+                                    if word == sentenceInfo[1]['words'][counter]:
+                                        newPos.append(sentenceInfo[1]['pos'][counter])
+                                        counter += 1
+                                    else:
+                                        newPos.append(treePos[wordIndex])
+                                print(zip(sentenceInfo[1]['words'],
+                                          sentenceInfo[1]['pos']),
+                                      tree[1].pos(),
+                                      newPos)
+                                print(tree[1])
                                 
+                                validConnectives = treeUtils.getConnectives(tree[1],
+                                                                            validLeftSiblings=('0',),
+                                                                            blacklist = {tuple(k.split()) for k in wordUtils.modal_auxiliary},
+                                                                            whitelist=wordUtils.all_markers,
+                                                                            pos=newPos)
+                                print(validConnectives)                    
+                                lemmasLower = [i.lower() for i in sentenceInfo[1]['lemmas']]
+                                potentialAltlexes = {tuple(lemmasLower[i[0]:i[1]] + sentenceInfo[1]['pos'][i[0]:i[1]]) for i in validConnectives}
+                                #{tuple(lemmasLower[:i] + sentenceInfo[1]['pos'][:i]) for i in range(1,len(lemmasLower)+1)}
+                                intersection = potentialAltlexes & altlexes
+                                if len(intersection):
+                                    print(intersection)                                    
+                                    altlexLength = max(map(len, intersection))/2
+                                    relType = 'AltLex'
+                                else:
+                                    continue
+                            else:
+                                #data[3] = connective span and is always contained within a sentence
+                                if data[3]:
+                                    connectiveStart = int(min(rangeRe.split(data[3]), key=int))
+                                    connectiveEnd = int(max(rangeRe.split(data[3]), key=int))
+                                    altlexLength = len(word_tokenize(wsj[connectiveStart:connectiveEnd+1]))
+                                else:
+                                    connectiveEnd = None
+                                    connectiveStart = None
+                                    altlexLength = 0
+                                    
                             #print(relType, classes)
-                            datapoint = {'sentences': sentenceInfo,
+                            datapoint = {'sentences': [sentenceInfo[1], sentenceInfo[0]],
                                          'tag': tag,
                                          'relation': relType,
                                          'classes': list(filter(None, classes)),
                                          #'connectiveStart': connectiveStart,
                                          #'connectiveEnd': connectiveEnd,
-                                         'altlexLength': len(word_tokenize(wsj[connectiveStart:connectiveEnd+1])) if relType == 'AltLex' else 0}
+                                         'altlexLength': altlexLength}
                             #print(datapoint)
                             dataset[r].append(datapoint)
 

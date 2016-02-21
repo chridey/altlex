@@ -9,16 +9,18 @@ import itertools
 import time
 import gzip
 import collections
+import operator
 
 import numpy as np
 from sklearn.externals import joblib
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import MinMaxScaler, StandardScaler#, RobustScaler
 
 from chnlp.utils.utils import splitData,balance
 from chnlp.altlex.featureExtractor import makeDataset
 from chnlp.altlex.config import Config
 from chnlp.ml.sklearner import Sklearner
+from chnlp.ml.gridSearch import HeldOutGridSearch
 
 from chnlp.altlex.dataPoint import DataPoint
 
@@ -47,6 +49,8 @@ if __name__ == '__main__':
                         help = 'test on the set aside data (default: train only)')
     parser.add_argument('--testfile', 
                         help = 'test on the set aside data (default: train only)')
+    parser.add_argument('--tunefile', 
+                        help = 'tune on the set aside data when doing hyperparameter optimization (default: cross-validate on training)')
 
     parser.add_argument('--all', '-a', action='store_true',
                         help = 'use all data for training or cross-validation (default:set aside some for testing)')
@@ -71,12 +75,15 @@ if __name__ == '__main__':
     parser.add_argument('--features',
                         help = 'comma-separated list of features, overrides --config option')
 
-    parser.add_argument('--preprocessor',action='store_true')
-                        #choices = ('polynomial', ))
+    parser.add_argument('--preprocessor', choices = ('standard', 'minmax', 'robust', 'polynomial'))
 
     parser.add_argument('--maxSupervised', type=float, default=float('inf'))
 
     parser.add_argument('--transformer', type=joblib.load)
+
+    parser.add_argument('--combinations', action='store_true',
+                        help = 'do all combinations of experimental and group settings with each other instead of just individually')
+                        
 
     args = parser.parse_args()
 
@@ -84,10 +91,6 @@ if __name__ == '__main__':
     if args.config:
         with open(args.config) as f:
             config.setParams(json.load(f))
-
-    if args.features:
-        features = set(args.features.split(','))
-        config.setFeatures(features)
 
     print('loading data...')
     starttime = time.time()
@@ -106,6 +109,15 @@ if __name__ == '__main__':
                 testdata = json.load(f)
     else:
         testdata = None
+    if args.tunefile:
+        if args.gz:
+            with gzip.open(args.tunefile) as f:
+                tunedata = json.load(f)
+        else:
+            with open(args.tunefile) as f:
+                tunedata = json.load(f)
+    else:
+        tunedata = None
     print(len(data))
     print(len(testdata) if testdata is not None else 0)
     print(time.time()-starttime)
@@ -125,16 +137,37 @@ if __name__ == '__main__':
     #                                       repeat=len(settingKeys)):
     if 'preprocessed' in config.params:
         config.featureExtractor.validFeatures.update({i:True for i in config.params['preprocessed']})
+    if args.features:
+        features = set(args.features.split(','))
+        config.setFeatures(features)
+
     if config.groupSettings:
         featureSettings = {}
         for group in config.groupSettings:
             featureSettings.update({i:True for i in group})
-    #for settingKey in settingKeys + ['']:
-        #featureSettings = config.fixedSettings.copy()
-        #    featureSettings.update(dict(zip(settingKeys, settingValues)))
-        #if settingKey != '':
-        #    featureSettings[settingKey] = True
-    for i in range(1):
+
+    #for ablation, test all fixed settings in combination with all, none, or some of the group/experimental settings
+    settingGroups = []
+    for settingKey in config.experimentalSettings:
+        settingGroups.append([settingKey])
+    for settingGroup in config.groupSettings:
+        settingGroups.append(settingGroup)
+    if args.combinations:
+        settingGroups.extend(map(lambda x:reduce(operator.add, x),
+                                 itertools.combinations(settingGroups, 2)))
+    #add settings for all and none
+    if len(settingGroups):
+        settingGroups.append(reduce(operator.add, settingGroups))
+    settingGroups.append([])
+    
+    for settingIndex,settingGroup in enumerate(settingGroups):
+        print('-'*30)
+        print(settingIndex)
+        featureSettings = config.fixedSettings.copy()
+        featureSettings.update(dict(zip(settingGroup, [True]*len(settingGroup))))
+        if not any(featureSettings.values()):
+            continue
+        
         for i in featureSettings:
             if featureSettings[i]:
                 print(i)
@@ -209,11 +242,37 @@ if __name__ == '__main__':
         if args.classifierSettings is not None:
             classifierSettings.update(args.classifierSettings)
         print(classifierType, classifierSettings, args.transformer)
-        if args.preprocessor:
+        if args.preprocessor == 'minmax':
             preprocessor = MinMaxScaler()
+        elif args.preprocessor == 'standard':
+            preprocessor = StandardScaler()
+        elif args.preprocessor == 'robust':
+            preprocessor = RobustScaler()
+        elif args.preprocessor == 'polynomial':
+            preprocessor = PolynomialFeatures()
         else:
             preprocessor = None
-        classifier = Sklearner(classifierType(**classifierSettings), args.transformer, preprocessor)
+
+        if tunedata:
+            tuning = makeDataset(tunedata,
+                                 config.featureExtractor,
+                                 featureSettings,
+                                 preprocessed=args.preprocessed,
+                                 invalidLabels = {2})
+            classifierName = classifierSettings.pop('classifier', args.classifier)
+            parameters = classifierSettings.pop('parameters', {})
+            searchParameters = classifierSettings.pop('searchParameters', {})
+            classifier = HeldOutGridSearch(classifierName,
+                                           parameters,
+                                           searchParameters,
+                                           args.transformer,
+                                           preprocessor,
+                                           tuning,
+                                           **classifierSettings)
+        else:
+            classifier = Sklearner(classifierType(**classifierSettings),
+                                   args.transformer,
+                                   preprocessor)
 
         if args.crossvalidate:
             X, y = zip(*training)
@@ -239,6 +298,7 @@ if __name__ == '__main__':
             print(total)
             for count in counts:
                 print(count, counts[count])
+
             classifier.fit_transform(X, y)
 
         if args.analyze_features:
@@ -279,7 +339,8 @@ if __name__ == '__main__':
 
         classifier.close()
 
-    if args.save:
-        classifier.save(args.save)
-        with open(args.save + '_predictions.json', 'w') as f:
-            json.dump(predictions.tolist(), f)
+        if args.save:
+            outfilename = args.save + '_' + str(settingIndex)
+            classifier.save(outfilename)
+            with open(outfilename + '_predictions.json', 'w') as f:
+                json.dump(predictions.tolist(), f)

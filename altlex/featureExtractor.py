@@ -33,6 +33,8 @@ from chnlp.semantics.wordNetManager import WordNetManager
 from chnlp.semantics.verbNetManager import VerbNetManager
 from chnlp.semantics.frameNetManager import FrameNetManager
 
+from chnlp.utils.dependencyUtils import getRoot,getEventAndArguments
+
 from chnlp.altlex.taggedSet import TaggedDataPoint
 
 def wordnet_distance(word1, word2):
@@ -75,6 +77,16 @@ def makeDataset(data, featureExtractor, featureSettings, max=float('inf'), prepr
             else:
                 label = dataPoint[1]
             features = {i:j for i,j in dataPoint[0].items() if any(i.startswith(f) for f in featureSettings)}
+            if 'a_embedding' in dataPoint[0] and 'b_embedding' in dataPoint[0]:
+                if 'word2vec_concat' in featureSettings:
+                    for section in ('a_embedding', 'b_embedding'):
+                        for index,i in enumerate(dataPoint[0][section]):
+                            features[section + '_' + str(index)] = i
+                if 'word2vec_add' in featureSettings:
+                    if len(dataPoint[0]['a_embedding']) and len(dataPoint[0]['b_embedding']):
+                        for index,i in enumerate(numpy.array(dataPoint[0]['a_embedding']) + \
+                                                 numpy.array(dataPoint[0]['b_embedding'])):
+                            features['embedding_' + str(index)] = i
             taggedDataPoint = TaggedDataPoint((features, label))
         else:
             dp = DataPoint(dataPoint)
@@ -178,6 +190,7 @@ class FeatureExtractor:
                               'intersection' : self.getIntersection,
                               'noun_intersection' : self.getNounIntersection,
                               'altlex_pos' : self.getAltlexPosNgrams,
+                              'pos_indices' : self.getPosIndices,                              
                               'first_pos' : self.getFirstPos,
                               'altlex_marker' : self.getAltlexMarker,
                               'altlex_length': self.getAltlexLength,
@@ -213,6 +226,23 @@ class FeatureExtractor:
                               'head_verb_net_pair': self.getHeadVerbNetPair,
                               'ordered_data': self.orderedData,
                               'kld_latent_factors': self.kldLatentFactors,
+                              'head_word_curr': self.getHeadWordCurr,
+                              'head_word_prev': self.getHeadWordPrev,
+                              'head_word_altlex': self.getHeadWordAltlex,
+                              'head_word_cat_curr': self.getHeadWordCatCurr,
+                              'head_word_cat_prev': self.getHeadWordCatPrev,
+                              'head_word_cat_altlex': self.getHeadWordCatAltlex,
+                              'head_word_verbnet_curr': self.getHeadWordVerbNetCurr,
+                              'head_word_verbnet_prev': self.getHeadWordVerbNetPrev,
+                              'head_word_verbnet_altlex': self.getHeadWordVerbNetAltlex,
+                              'arguments_curr': self.getArgumentsCurr,
+                              'arguments_prev': self.getArgumentsPrev,
+                              'arguments_cat_curr': self.getArgumentsCatCurr,
+                              'arguments_cat_prev': self.getArgumentsCatPrev,
+                              'arguments_verbnet_curr': self.getArgumentsVerbNetCurr,
+                              'arguments_verbnet_prev': self.getArgumentsVerbNetPrev,
+                              'first_pos_post_altlex': self.getFirstPosPostAltlex,
+                              'last_pos_pre_altlex': self.getLastPosPreAltlex
                               }
 
         self.functionFeatures = dict((v,k) for k,v in self.validFeatures.items())
@@ -517,6 +547,19 @@ class FeatureExtractor:
         return self.getNgrams(self.functionFeatures[self.getAltlexPosNgrams],
                               dataPoint.getAltlexPos())
 
+    def getPosIndices(self, dataPoint):
+        ret = {}
+        for i,p in enumerate(dataPoint.getAltlexPos()):
+            ret['{}_altlex_{}_{}'.format(self.functionFeatures[self.getAltlexPosNgrams],
+                                         p, i)] = True
+        for i,p in enumerate(dataPoint.getPrevPos()[::-1]):
+            ret['{}_prev_{}_{}'.format(self.functionFeatures[self.getAltlexPosNgrams],
+                                       p, i)] = True
+        for i,p in enumerate(dataPoint.getCurrPosPostAltlex()):
+            ret['{}_curr_{}_{}'.format(self.functionFeatures[self.getAltlexPosNgrams],
+                                       p, i)] = True
+        return ret
+
     @lru_cache(maxsize=cacheSize)
     def getFirstPos(self, dataPoint):
         return {self.functionFeatures[self.getFirstPos] + dataPoint.getAltlexPos()[0] : True}
@@ -753,6 +796,139 @@ class FeatureExtractor:
                                                                  'previous',
                                                                  'lemmas'))
 
+
+    #get head word
+    def getHeadWordCurr(self, dataPoint):
+        root = getRoot(dataPoint.getCurrDependencies())
+        if root is None:
+            return {}
+        else:
+            return {self.functionFeatures[self.getHeadWordCurr] + '_' + dataPoint.getCurrLemmasPostAltlex()[root] : True}
+    def getHeadWordPrev(self, dataPoint):
+        root = getRoot(dataPoint.getPrevDependencies())
+        if root is None:
+            return {}
+        else:
+            return {self.functionFeatures[self.getHeadWordPrev] + '_' + dataPoint.getPrevLemmas()[root] : True}
+    def getHeadWordAltlex(self, dataPoint):
+        root = getRoot(dataPoint.getAltlexDependencies())
+        if root is None:
+            return {}
+        else:
+            return {self.functionFeatures[self.getHeadWordAltlex] + '_' + dataPoint.getAltlexLemmatized()[root] : True}
+
+    def _getHeadWordCat(self, function, root, lemmas, pos, ner):
+        if root is not None and pos[root][0] in {'V', 'N', 'J', 'R'}:
+            synsets = wn.synsets(lemmas[root],
+                                 pos=self.wn.wordNetPOS[pos[root][0]])
+            if len(synsets):
+                lexname = synsets[0].lexname()
+                return {self.functionFeatures[function] + '_' + lexname : True}
+            elif pos[root][0] == 'N' and ner[root] != "O":
+                lexname = 'noun.' + ner[root].lower()
+                return {self.functionFeatures[function] + '_' + lexname : True}
+
+        return {self.functionFeatures[function] + '_' + str(None): True}
+
+    def getHeadWordCatCurr(self, dataPoint):
+        root = getRoot(dataPoint.getCurrDependencies())
+        return self._getHeadWordCat(self.getHeadWordCatCurr, root, dataPoint.getCurrLemmasPostAltlex(), dataPoint.getCurrPosPostAltlex(), dataPoint.getCurrNerPostAltlex())
+    def getHeadWordCatPrev(self, dataPoint):
+        root = getRoot(dataPoint.getPrevDependencies())
+        return self._getHeadWordCat(self.getHeadWordCatPrev, root, dataPoint.getPrevLemmas(), dataPoint.getPrevPos(), dataPoint.getPrevNer())
+    def getHeadWordCatAltlex(self, dataPoint):
+        root = getRoot(dataPoint.getAltlexDependencies())
+        return self._getHeadWordCat(self.getHeadWordCatAltlex, root, dataPoint.getAltlexLemmatized(), dataPoint.getAltlexPos(), dataPoint.getAltlexNer())
+
+    def _getHeadWordVerbNet(self, function, root, lemmas, pos):
+        ret = {}
+        if root is not None and pos[root][0] == 'V':
+            for verbClass in self.vn.getClasses(lemmas[root]):
+                ret [self.functionFeatures[function] + '_' + verbClass] = True
+
+        if not len(ret):
+            return {self.functionFeatures[function] + '_' + str(None): True}
+        return ret
+    def getHeadWordVerbNetCurr(self, dataPoint):
+        root = getRoot(dataPoint.getCurrDependencies())
+        return self._getHeadWordVerbNet(self.getHeadWordVerbNetCurr, root, dataPoint.getCurrLemmasPostAltlex(), dataPoint.getCurrPosPostAltlex())
+    def getHeadWordVerbNetPrev(self, dataPoint):
+        root = getRoot(dataPoint.getPrevDependencies())
+        return self._getHeadWordVerbNet(self.getHeadWordVerbNetPrev, root, dataPoint.getPrevLemmas(), dataPoint.getPrevPos())
+    def getHeadWordVerbNetAltlex(self, dataPoint):
+        root = getRoot(dataPoint.getAltlexDependencies())
+        return self._getHeadWordVerbNet(self.getHeadWordVerbNetAltlex, root, dataPoint.getAltlexLemmatized(), dataPoint.getAltlexPos())
+
+    def _getArguments(self, function, arguments, lemmas, pos):
+        ret = {}
+        for argument in arguments:
+            #limit to only content words
+            if pos[argument][0] in {'V', 'N', 'J', 'R'}:
+                ret[self.functionFeatures[function] + '_' + lemmas[argument]] = True
+        if not len(ret):
+            return {self.functionFeatures[function] + '_' + str(None) : True}
+        return ret        
+    def getArgumentsCurr(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getCurrDependencies())
+        return self._getArguments(self.getArgumentsCurr, arguments, dataPoint.getCurrLemmasPostAltlex(), dataPoint.getCurrPosPostAltlex())                    
+    def getArgumentsPrev(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getPrevDependencies())
+        return self._getArguments(self.getArgumentsPrev, arguments, dataPoint.getPrevLemmas(), dataPoint.getPrevPos())
+
+    def _getArgumentsCat(self, function, arguments, lemmas, pos, ner):
+        ret = {}
+        for argument in arguments:
+            #limit to only content words
+            if pos[argument][0] in {'V', 'N', 'J', 'R'}:
+                synsets = wn.synsets(lemmas[argument],
+                                     pos=self.wn.wordNetPOS[pos[argument][0]])
+                if len(synsets):
+                    lexname = synsets[0].lexname()
+                    ret[self.functionFeatures[function] + '_' + lexname] = True
+                elif pos[argument][0] == 'N' and ner[argument] != "O":
+                    lexname = 'noun.' + ner[argument].lower()
+                    ret[self.functionFeatures[function] + '_' + lexname] = True
+                    
+        if not len(ret):
+            return {self.functionFeatures[function] + '_' + str(None) : True}
+        return ret            
+    def getArgumentsCatCurr(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getCurrDependencies())
+        return self._getArgumentsCat(self.getArgumentsCatCurr, arguments, dataPoint.getCurrLemmasPostAltlex(), dataPoint.getCurrPosPostAltlex(), dataPoint.getCurrNerPostAltlex())
+    def getArgumentsCatPrev(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getPrevDependencies())
+        return self._getArgumentsCat(self.getArgumentsCatPrev, arguments, dataPoint.getPrevLemmas(), dataPoint.getPrevPos(), dataPoint.getPrevNer())
+
+    def _getArgumentsVerbNet(self, function, arguments, lemmas, pos):
+        ret = {}
+        for argument in arguments:
+            if pos[argument][0] == 'V':
+                for verbClass in self.vn.getClasses(lemmas[argument]):
+                    ret [self.functionFeatures[function] + '_' + verbClass] = True
+        if not len(ret):
+            return {self.functionFeatures[function] + '_' + str(None): True}
+        return ret
+
+    def getArgumentsVerbNetCurr(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getCurrDependencies())
+        return self._getArgumentsVerbNet(self.getArgumentsVerbNetCurr, arguments, dataPoint.getCurrLemmasPostAltlex(), dataPoint.getCurrPosPostAltlex())
+    def getArgumentsVerbNetPrev(self, dataPoint):
+        root,arguments = getEventAndArguments(dataPoint.getPrevDependencies())
+        return self._getArgumentsVerbNet(self.getArgumentsVerbNetPrev, arguments, dataPoint.getPrevLemmas(), dataPoint.getPrevPos())
+
+    def getFirstPosPostAltlex(self, dataPoint):
+        pos = dataPoint.getCurrPosPostAltlex()[0]
+        return {self.functionFeatures[self.getFirstPosPostAltlex] + '_' + pos:
+                True}
+
+    def getLastPosPreAltlex(self, dataPoint):
+        if len(dataPoint.getPrevPos()):
+            pos = dataPoint.getPrevPos()[-1]
+        else:
+            pos = None
+        return {self.functionFeatures[self.getLastPosPreAltlex] + '_' + str(pos):
+                True}
+        
     #modify for nouns
     def _getWordNetCat(self, pos, lemmas, search):
         cats = []
@@ -1353,6 +1529,7 @@ class FeatureExtractor:
     def kldLatentFactors(self, dataPoint):
         factors = self.latentFactorsLookup[hash(dataPoint)]
         return dict(zip(range(factors.shape[0]), factors))
+
     
     def addFeatures(self, dataPoint, featureSettings):
         '''add features for the given dataPoint according to which are

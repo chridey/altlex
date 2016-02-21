@@ -123,7 +123,8 @@ class WikNetMatch:
         else:
             Z = (1+structural*.5)*numContent #len(aLemmas)
         if Z == 0:
-            print(' '.join(aLemmas), ' '.join(bLemmas))
+            if verbose:
+                print(' '.join(aLemmas), ' '.join(bLemmas))
             return 0
 
         if penalty:
@@ -158,7 +159,7 @@ class WikNetMatch:
 
         scores = []
         for title in sorted(titles.keys()):
-            #print(title)
+            print(title)
             article = parsedData[parsedTitles[title]]['sentences']
 
             for a in article[0]:
@@ -229,15 +230,23 @@ class WikNetMatch:
 def getTitles(annotatedData):
     return dict(zip(annotatedData['titles'], range(len(annotatedData['titles']))))
 
+def getParsedTitles(parsedData):
+    return {article['title']:i for i,article in enumerate(parsedData)}
+
 def getLabels(annotatedData, titles):
     labels = []
 
     for title in sorted(titles):
         print(title)
         matches = annotatedData['matches'][titles[title]]
+        m = np.array(matches)
+        print(m.shape)
+        labels.extend((m >= 3).ravel().tolist())
+        '''
         for i1 in range(len(matches)):
             for i2 in range(len(matches[i1])):
                 labels.append(int(matches[i1][i2]) >= 3)
+        '''
     return labels
 
 def evaluate(labels, scores, minThresh=.3, maxThresh=.9, step=.05, indices=Ellipsis):
@@ -250,6 +259,24 @@ def evaluate(labels, scores, minThresh=.3, maxThresh=.9, step=.05, indices=Ellip
                                                                               predictions,
                                                                               average='binary')
         results.append((float('%.2lf' % thresh), precision, recall, f_score))
+    return results
+
+def evaluateCombined(labels, scores1, scores2, minThresh=.3, maxThresh=.9, step=.05, indices=Ellipsis):
+    s1 = np.array(scores1)
+    s2 = np.array(scores2)    
+    l = np.array(labels)
+    results = []
+    for thresh1 in np.arange(minThresh, maxThresh, step):
+        predictions1 = s1[indices] > thresh1
+        for thresh2 in np.arange(minThresh, maxThresh, step):
+            predictions2 = s2[indices] > thresh2
+            predictions = predictions1 + predictions2
+            precision, recall, f_score, support = precision_recall_fscore_support(l[indices],
+                                                                                  predictions,
+                                                                                  average='binary')
+            results.append((float('%.2lf' % thresh1),
+                            float('%.2lf' % thresh2),
+                            precision, recall, f_score))
     return results
 
 def getLengthDiffs(parsedData, titles, multisentence=False):
@@ -277,10 +304,15 @@ def getLengthDiffs(parsedData, titles, multisentence=False):
             
     return ret
             
-def getIndices(parsedData, one2one=True, one2two=False, two2one=False, two2two=False):
+def getIndices(parsedData, titles, one2one=True, one2two=False, two2one=False, two2two=False, validTitles=None):
+
     ret = []
     index = 0
-    for article in parsedData:
+    for title in sorted(titles):
+        article = parsedData[titles[title]]
+        if validTitles is not None and title not in validTitles:
+            index += len(article['sentences'][0])+len(article['sentences'][1])-2
+            continue
         for i in range(len(article['sentences'][0])):
             if one2one:
                 ret.extend(list(range(index, index+len(article['sentences'][1]))))

@@ -103,7 +103,7 @@ def balance(data, oversample=True):
 
     return data
 
-def balance(data, oversample=True, seed=None, bootstrap=False):
+def balance(data, oversample=True, seed=None, bootstrap=False, verbose=False):
     data = list(data)
     total = len(data)
     
@@ -111,7 +111,13 @@ def balance(data, oversample=True, seed=None, bootstrap=False):
     for datum in data:
         balancedData[datum[1]].append(datum)
 
-    if oversample:
+    if verbose:
+        for label in balancedData:
+            print(len(balancedData[label]))
+            
+    if type(oversample) == int:
+        num = oversample
+    elif oversample:
         num = max(len(balancedData[i]) for i in balancedData)
     else:
         num = min(len(balancedData[i]) for i in balancedData)

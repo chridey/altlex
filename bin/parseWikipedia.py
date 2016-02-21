@@ -9,9 +9,9 @@ import corenlp
 from chnlp.word2vec import sentenceRepresentation
 
 if __name__ == '__main__':
-    port = 9988
+    port = 9989
     numProcs = 8
-    rev = True
+    rev = False
      
     c = corenlp.client.CoreNLPClient(port=port)
     
@@ -93,7 +93,7 @@ if __name__ == '__main__':
             j.append(pair)
                 
         #need to output results every so often
-        if time.time() - starttime > timeBetweenOutput or index == len(titles)-1:
+        if time.time() - starttime > timeBetweenOutput or index == len(titles)-1 or index==endIndex:
             if rev:
                 filename = '{}.{}.{}.json.gz'.format(index, prevIndex, total)
                 prevIndex = index + 1

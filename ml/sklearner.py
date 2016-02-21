@@ -14,6 +14,7 @@ from sklearn.feature_extraction import DictVectorizer
 from sklearn.metrics import precision_recall_fscore_support
 
 from sklearn.utils import shuffle
+from sklearn.utils.validation import NotFittedError
 
 from scipy.stats import ttest_rel
 
@@ -31,29 +32,49 @@ class Sklearner:
             self._forced = True
         else:
             self._forced = False
+
         if preprocessor is None:
             class IdentityPreprocessor:
-                def fit_transform(self, X): return X
+                def transform(self, X): return X
+                def fit_transform(self, X): return X                
             self.preprocessor = IdentityPreprocessor()
+            self.preprocessed = True
         else:
             self.preprocessor = preprocessor
-
+            try:
+                preprocessor.transform(None)
+            except NotFittedError:
+                self.preprocessed = False
+            except Exception:
+                self.preprocessed = True
+                
         print(type(self.transformer))
+
+    def set_params(self, *args, **kwargs):
+        self.classifier.set_params(*args, **kwargs)
         
     def transform(self, features, force=False):
         if self.transformer is None or (force and self._forced):
             self.transformer = DictVectorizer()
-            return self.preprocessor.fit_transform(self.transformer.fit_transform(features).toarray())
-            
-        return self.preprocessor.fit_transform(self.transformer.transform(features).toarray())
+            transformed = self.transformer.fit_transform(features).toarray()
+        else:
+            transformed = self.transformer.transform(features).toarray()
+
+        if self.preprocessed:
+            return self.preprocessor.transform(transformed)
+        else:
+            self.preprocessed = True
+            return self.preprocessor.fit_transform(transformed)
+
+    def decision_function(self, X):
+        return self.classifier.decision_function(X)
     
     def fit(self, X, y):
         #shuffle the data, important for classifiers such as SGD
         X, y = shuffle(X, y, random_state=0)
 
         y = np.array(y, dtype=int)
-        self.model = self.classifier.fit(X, y)
-        return self.model
+        return self.classifier.fit(X, y)
 
     def fit_transform(self, X, y):
         X = self.transform(X, True)
@@ -61,7 +82,7 @@ class Sklearner:
         return self.fit(X, y)
 
     def predict(self, X):
-        return self.model.predict(X)
+        return self.classifier.predict(X)
 
     def metrics(self, X, y):
         X = self.transform(X)
@@ -212,11 +233,11 @@ class Sklearner:
     
     @property
     def numClasses(self):
-        return self.model.classes_
+        return self.classifier.classes_
     
     @property
     def _feature_importances(self):
-        return self.model.feature_importances_
+        return self.classifier.feature_importances_
 
     def show_most_informative_features(self, n=50):
         '''
@@ -245,15 +266,15 @@ class Sklearner:
         for featureName,featureValue in self.featureImportances[:n]:
             print("{}\t{}".format(featureName, featureValue))
         
-         #print(self.model.feature_importances_)
+         #print(self.classifier.feature_importances_)
 
     def save(self, filename):
         try:
-            joblib.dump(self.model, filename, compress=9)
+            joblib.dump(self.classifier, filename, compress=9)
             joblib.dump(self.transformer, filename + '_vectorizer', compress=9)
         except Exception as e:
             print("ERROR: {}".format(e))
-            joblib.dump(self.model, filename)
+            joblib.dump(self.classifier, filename)
             joblib.dump(self.transformer, filename + '_vectorizer')
         #with open(filename + '.map', 'wb') as f:
         #    pickle.dump(self.featureMap, f)
@@ -263,7 +284,7 @@ class Sklearner:
         model = joblib.load(filename)
         classifier = cls(model)        
         classifier.transformer = joblib.load(filename + '_vectorizer')
-        classifier.model = classifier.classifier
+
         return classifier
 
     def close(self):

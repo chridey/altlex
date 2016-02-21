@@ -1,4 +1,5 @@
 import json
+import base64
 import logging
 
 import numpy as np
@@ -47,6 +48,14 @@ def pairEmbeddings():
     fileIndex = int(request.args.get('fileIndex'))
     return json.dumps(np.asarray(getEmbeddings(data, model).lookupPairEmbeddings(articleIndex, fileIndex)).tolist())
 
+@app.route("/infer/")
+def infer():
+    data = request.args.get('data')
+    model = request.args.get('model')
+    words = request.args.get('words')
+    words = base64.b64decode(words).split()
+    return json.dumps(np.asarray(getEmbeddings(data, model).infer(words)).tolist())
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    app.run(host='0.0.0.0', threaded=True)
+    app.run(host='localhost', threaded=True)

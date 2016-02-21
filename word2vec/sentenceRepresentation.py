@@ -1,5 +1,6 @@
 import gzip
 import json
+import base64
 
 from sklearn.metrics import pairwise_distances
 
@@ -82,6 +83,9 @@ class PairedSentenceEmbeddings:
     
     #method for looking up a sentence embedding given a file, article, and sentence index
     def getEmbedding(self, fileIndex, articleIndex, sentenceIndex):
+        raise NotImplementedError
+
+    def infer(self, words):
         raise NotImplementedError
 
     def predict(self, indices, pairs=False, verbose=False):
@@ -177,9 +181,12 @@ class Doc2VecEmbeddings(LocalDataEmbeddings):
                                                              sentenceIndex,
                                                              isPair)]
 
+    def infer(self, words):
+        return self._model.infer_vector(words)
+
 def factory(data, model):
     if not model or model == 'None':
-        return PairedSentenceEmbeddings(data, model)
+        return PairedSentenceEmbeddings(data, None)
     elif 'wtmf' in model:
         return WTMFEmbeddings(data, model)
     elif 'doc2vec' in model:
@@ -231,3 +238,22 @@ class PairedSentenceEmbeddingsClient(PairedSentenceEmbeddings):
                                       fileIndex=fileIndex))
         return r.json()
     
+    def infer(self, words):
+        try:
+            encodedWords = base64.b64encode(' '.join(words))
+        except UnicodeEncodeError:
+            return []
+        r = requests.get(self.makeURL('infer',
+                                      words=encodedWords))
+        try:
+            return r.json()
+        except ValueError:
+            #try again once more
+            encodedWords = base64.b64encode(' '.join(words))
+            r = requests.get(self.makeURL('infer',
+                                          words=encodedWords))
+            try:
+                return r.json()
+            except ValueError:
+                return []
+            

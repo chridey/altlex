@@ -169,6 +169,18 @@ class DataPoint:
     def getCurrPosPostAltlex(self):
         return self.getCurrPos()[self.altlexLength:]
 
+    def getCurrNer(self):
+        return self._dataDict['sentences'][0]['ner']
+
+    def getPrevNer(self):
+        return self._dataDict['sentences'][1]['ner']
+
+    def getCurrNerPostAltlex(self):
+        return self._dataDict['sentences'][0]['ner'][self.altlexLength:]
+
+    def getAltlexNer(self):
+        return self._dataDict['sentences'][0]['ner'][:self.altlexLength]
+
     def getCurrParse(self):
         if self._currParse is not None:
             return self._currParse
@@ -182,6 +194,9 @@ class DataPoint:
     
     def getCurrDependencies(self):
         return self._dataDict['sentences'][0]['dependencies']
+
+    def getAltlexDependencies(self):
+        return self._dataDict['altlex']['dependencies']
 
     def _getAltlex(self, form='words'):
         assert(form in ('words', 'lemmas', 'stems'))

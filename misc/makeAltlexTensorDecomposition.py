@@ -119,7 +119,7 @@ class PreprocessedWordPairIterator(WordPairIterator):
             
 if __name__ == '__main__':
     parsedDataDir = sys.argv[1]
-    countsFile = sys.argv[2]
+    countsFile = sys.argv[3]
     print('loading labels at {}...'.format(time.time()))
     with gzip.open(sys.argv[2]) as f:
         labels, altlexes = json.load(f)
