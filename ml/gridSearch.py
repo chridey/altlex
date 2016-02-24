@@ -13,16 +13,14 @@ from sklearn import metrics
 
 import numpy as np
 
-from chnlp.ml.sgd import SGD
-from chnlp.ml.labelSpreading import LabelSpreader,LabelPropagator
-from chnlp.ml.sklearner import Sklearner
-
 from sklearn.pipeline import Pipeline,make_pipeline
 from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.feature_selection import SelectKBest
 from sklearn.feature_selection import chi2
 
 from sklearn.base import BaseEstimator
+
+from chnlp.ml.sklearner import Sklearner
 
 class GridSearch(BaseEstimator):
     def __init__(self, classifier, parameters, searchParameters):
@@ -128,90 +126,4 @@ class HeldOutGridSearch(Sklearner, GridSearch):
 
             self.classifier = bestClassifier
             
-class GridSearchSVM(GridSearch):
-    def __init__(self):
-        #super().__init__()
-        GridSearch.__init__(self)
-        self.classifierType = SVC#(kernel='linear')#(verbose=True)
-        self.parameters = {}#'kernel': 'linear'}
-        self.searchParameters = {'C': (.1, 1, 10, 100, 1000),
-                           }#'gamma': (0, .0001, .001, .01, .1)} #, 1)}
-        self.setClassifier()
-
-class GridSearchLinearSVM(GridSearch):
-    def __init__(self):
-        #super().__init__()
-        GridSearch.__init__(self)
-        self.classifierType = LinearSVC#(kernel='linear')#(verbose=True)
-        self.parameters = {}
-        self.searchParameters = {'C': (.1, 1, 10, 100, 1000),
-                           }#'gamma': (0, .0001, .001, .01, .1)} #, 1)}
-        self.setClassifier()
-
-class GridSearchLogit(GridSearch):
-    def __init__(self):
-        #super().__init__()
-        GridSearch.__init__(self)
-        self.classifierType = LogisticRegression
-        self.parameters = {}
-        self.searchParameters = {'C': (.01, .1, 1, 10, 100)}
-        self.setClassifier()
-
-class GridSearchSGD(GridSearch):
-    def __init__(self):
-        #super().__init__()
-        GridSearch.__init__(self,
-                            'sgd',
-                            {'n_iter': 100},
-                            {'penalty': ('l2', 'elasticnet'),
-                           'alpha': 10.0**-np.arange(1,7)} #(0.001, 0.0001, 0.00001)}
-                            )
-        
-class GridSearchLabelSpreader(GridSearch, LabelSpreader):
-    def __init__(self):
-        super().__init__()
-        self.classifierType = LabelSpreading
-        self.parameters = {}
-        self.searchParameters = {'gamma': (.02, .2, 2, 20, 200),
-                           'alpha': (.05, .1, .2, .5, .8, 1)}
-        self.setClassifier()
-        
-    def show_most_informative_features(self, n=50):
-        #TODO
-        pass
-    
-class GridSearchPipeline(GridSearch):
-    choices = {'svm': GridSearchSVM,
-               'sgd': GridSearchSGD,
-               'lr': GridSearchLogit}
-    def __init__(self, choice='sgd'):
-        assert(choice in self.choices)
-        clf = self.choices[choice]()
-        self.vectorizer = clf.vectorizer
-        self.classifierType = Pipeline
-        self.parameters = {'steps': [('chi', SelectKBest(chi2)),
-                                     (choice, clf.classifierType(**clf.parameters))]}
-
-        self.searchParameters = {'chi__k': (1000, 'all')}
-        self.searchParameters.update({'{}__{}'.format(choice, param):clf.searchParameters[param] for param in clf.searchParameters})
-        self.setClassifier()
-
-    @property
-    def _feature_importances(self):
-        return self.classifier.best_estimator_.steps[1][1].coef_.tolist()[0]
-'''
-# uncommenting more parameters will give better exploring power but will
-# increase processing time in a combinatorial way
-parameters = {
-    #'vect__max_df': (0.5, 0.75, 1.0),
-        #'vect__max_features': (None, 5000, 10000, 50000),
-    #'vect__ngram_range': ((1, 1), (1, 2)),  # unigrams or bigrams
-        #'tfidf__use_idf': (True, False),
-        #'tfidf__norm': ('l1', 'l2'),
-#    'chi__k': (10000, 100000, 'all'),
-    'clf__alpha': (0.00001, 0.000001),
-    'clf__penalty': ('l2', 'elasticnet'),
-        #'clf__n_iter': (10, 50, 80),
-    }
-'''
                  

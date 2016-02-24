@@ -18,7 +18,7 @@ from sklearn.utils.validation import NotFittedError
 
 from scipy.stats import ttest_rel
 
-from chnlp.utils.utils import indexedSubset, balance
+from altlex.utils.utils import indexedSubset, balance
 
 class Sklearner:
     def __init__(self, classifier, transformer=None, preprocessor=None):
