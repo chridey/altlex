@@ -259,11 +259,25 @@ class PairedSentenceEmbeddingsClient(PairedSentenceEmbeddings):
             except ValueError:
                 return []
 
-    def batchSimilarity(self, articleIndex, pairs=False, verbose=False, n_jobs=8, metric='cosine'):
-        r = requests.get(self.makeURL('batchSimilarity',
-                                      articleIndex=articleIndex,
-                                      njobs=n_jobs,
-                                      pairs=pairs,
-                                      ))
-        return r.json()
-            
+    def batchSimilarity(self,
+                        articleIndex,
+                        pairs=False,
+                        verbose=False,
+                        n_jobs=8,
+                        metric='cosine',
+                        side='server'):
+        if side == 'server':
+            r = requests.get(self.makeURL('batchSimilarity',
+                                          articleIndex=articleIndex,
+                                          njobs=n_jobs,
+                                          pairs=pairs,
+                                          ))
+            return r.json()
+        elif side == 'client':
+            #run on client side
+            return super(PairedSentenceEmbeddingsClient,
+                         self).batchSimilarity(index,
+                                               pairs=pairs,
+                                               verbose=verbose,
+                                               n_jobs=n_jobs,
+                                               metric=metric)
