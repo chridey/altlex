@@ -79,12 +79,8 @@ if __name__ == '__main__':
     filename = None
     for i in range(startArticle, len(titles)):
         print(i, filenameLookup.get(i, None))
-        if i not in filenameLookup:
-            #poll until this file is created by the parser
-            while 1:
-                filenameLookup = getFilenames(indir)
-                if i in filenameLookup:
-                    break
+        if filenameLookup.get(i, None) is None:
+            continue
         if filenameLookup[i][0] != filename:
             print('opening file')
             filename = filenameLookup[i][0]
