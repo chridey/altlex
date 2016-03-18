@@ -48,6 +48,14 @@ def pairEmbeddings():
     fileIndex = int(request.args.get('fileIndex'))
     return json.dumps(np.asarray(getEmbeddings(data, model).lookupPairEmbeddings(articleIndex, fileIndex)).tolist())
 
+@app.route("/wordEmbedding/")
+def wordEmbedding():
+    data = request.args.get('data')
+    model = request.args.get('model')
+    word = request.args.get('word')
+    word = base64.b64decode(word.decode('utf-8'))
+    return json.dumps(np.asarray(getEmbeddings(data, model).lookupWordEmbedding(word)).tolist())
+
 @app.route("/infer/")
 def infer():
     data = request.args.get('data')

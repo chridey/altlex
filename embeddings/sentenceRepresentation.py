@@ -23,25 +23,26 @@ class PairedSentenceEmbeddings:
             self._data = PairedSentenceEmbeddings.cache[dataFilename]
         else:
             logger.debug('Reading data from file')            
-            with gzip.GzipFile(dataFilename) as f:
-                self._data = json.load(f)
+            self.loadData(dataFilename)
             PairedSentenceEmbeddings.cache[dataFilename] = self._data
             
-        self._titleLookup = {j:i for (i,j) in enumerate(self._data['titles'])}
-
         if modelFilename in PairedSentenceEmbeddings.cache:
             logger.debug('Loading model from cache')
             self._model = PairedSentenceEmbeddings.cache[modelFilename]
         else:
             self._model = None
 
+    def loadData(self, dataFilename):
+        with gzip.GzipFile(dataFilename) as f:
+            self._data = json.load(f)
+        self._titleLookup = {j:i for (i,j) in enumerate(self._data['titles'])}
         logger.debug(self._data['files'])
         logger.debug("Total Articles: {}".format(len(self._data['titles'])))
         #logger.debug("Max Indices: {}, {}".format(self._data['starts'][0][-1],
         #                                          self._data['starts'][1][-1]))
         logger.debug("Total Sentences: {}, {}".format(sum(map(len, self._data['articles'][0])),
                                                       sum(map(len, self._data['articles'][1]))))
-
+        
     @property
     def titles(self):
         return self._data['titles']
@@ -186,6 +187,27 @@ class Doc2VecEmbeddings(LocalDataEmbeddings):
     def infer(self, words):
         return self._model.infer_vector(words)
 
+class Word2VecEmbeddings(LocalDataEmbeddings):
+    def __init__(self, dataFilename, modelFilename):
+        LocalDataEmbeddings.__init__(self, dataFilename, modelFilename)
+        if self._model is None:
+            self._model = gensim.models.word2vec.Word2Vec.load(modelFilename)
+        self._oov = {}
+        
+    def loadData(self, dataFilename):
+        self._data = None
+    
+    def lookupWordEmbedding(self, word):
+        if word in self._model:
+            return self._model[word]
+        elif word not in self._oov:
+            try:
+                logger.debug('word {} not in model'.format(word.encode('utf-8')))
+            except Exception:
+                pass
+            self._oov[word] = np.random.uniform(-.2, .2, self._model.vector_size)
+        return self._oov[word]
+        
 def factory(data, model):
     if not model or model == 'None':
         return PairedSentenceEmbeddings(data, None)
@@ -193,6 +215,8 @@ def factory(data, model):
         return WTMFEmbeddings(data, model)
     elif 'doc2vec' in model:
         return Doc2VecEmbeddings(data, model)
+    elif 'word2vec' in model:
+        return Word2VecEmbeddings(data, model)
     else:
         raise NotImplementedError
     
@@ -239,6 +263,26 @@ class PairedSentenceEmbeddingsClient(PairedSentenceEmbeddings):
                                       articleIndex=articleIndex,
                                       fileIndex=fileIndex))
         return r.json()
+
+    def lookupWordEmbedding(self, word):
+        try:
+            encodedWord = base64.b64encode(word.encode('utf-8'))
+        except UnicodeDecodeError:
+            return []
+        r = requests.get(self.makeURL('wordEmbedding',
+                                      word=encodedWord))
+        try:
+            return r.json()
+        except ValueError:
+            #try again once more
+            encodedWords = base64.b64encode(word.encode('utf-8'))
+            r = requests.get(self.makeURL('wordEmbedding',
+                                          word=encodedWord))
+
+            try:
+                return r.json()
+            except ValueError:
+                return []
     
     def infer(self, words):
         try:
