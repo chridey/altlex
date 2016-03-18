@@ -20,6 +20,11 @@ from scipy.stats import ttest_rel
 
 from altlex.utils.utils import indexedSubset, balance
 
+class Identity:
+    def transform(self, X): return X
+    def fit_transform(self, X): return X                
+
+
 class Sklearner:
     def __init__(self, classifier, transformer=None, preprocessor=None):
         #self.featureMap = None
@@ -34,10 +39,7 @@ class Sklearner:
             self._forced = False
 
         if preprocessor is None:
-            class IdentityPreprocessor:
-                def transform(self, X): return X
-                def fit_transform(self, X): return X                
-            self.preprocessor = IdentityPreprocessor()
+            self.preprocessor = Identity()
             self.preprocessed = True
         else:
             self.preprocessor = preprocessor

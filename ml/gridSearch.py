@@ -1,31 +1,14 @@
-from sklearn.externals import joblib
-
-from sklearn import preprocessing
-from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import SGDClassifier
-from sklearn.svm import SVC, LinearSVC
-from sklearn.semi_supervised import LabelSpreading,LabelPropagation
-
 from sklearn.grid_search import GridSearchCV, ParameterGrid
-from sklearn.cross_validation import StratifiedKFold
-
+from sklearn.base import BaseEstimator
 from sklearn import metrics
-
+from sklearn.externals import joblib
 import numpy as np
 
-from sklearn.pipeline import Pipeline,make_pipeline
-from sklearn.feature_extraction.text import TfidfTransformer
-from sklearn.feature_selection import SelectKBest
-from sklearn.feature_selection import chi2
-
-from sklearn.base import BaseEstimator
-
-from chnlp.ml.sklearner import Sklearner
+from altlex.ml.sklearner import Sklearner
+from altlex.ml.config import Config
 
 class GridSearch(BaseEstimator):
     def __init__(self, classifier, parameters, searchParameters):
-        #avoid circular dependencies
-        from chnlp.altlex.config import Config
         self.config = Config()
         self.classifierType = self.config.classifiers[classifier]
         self.parameters = parameters
@@ -33,9 +16,6 @@ class GridSearch(BaseEstimator):
         self.setClassifier()
         
     def setClassifier(self):
-        #skf = StratifiedKFold(y,
-        #                      n_folds=2)
-
         self.classifier = GridSearchCV(self.classifierType(**self.parameters),
                                        self.searchParameters,
                                        scoring = 'f1',
@@ -44,16 +24,6 @@ class GridSearch(BaseEstimator):
                                        verbose=1)
                                        #cv=skf)
 
-    '''
-    def train(self, features, transform=True):
-        #super().train(features, transform)
-        Sklearner.train(self,features, transform)
-        print(self.classifier.best_score_)
-        print(self.classifier.best_params_)
-        print(self.classifier.grid_scores_)
-        self.model = self.classifier.best_estimator_
-        return self.model
-    '''
     def fit(self, X, y):
         model = self.classifier.fit(X, y)
         print(self.classifier.best_score_)
@@ -67,8 +37,11 @@ def _evaluateParameters(X, y, X_tune, y_tune,
         parameters = fixedParameters.copy()
         parameters.update(searchParameters)
         classifier = classifierType(**parameters)
-        classifier.fit(X, y)
 
+        #print('fitting {},{}: {}'.format(X.shape, y.shape, parameters))
+        classifier.fit(X, y)
+        #print('done fitting {}'.format(parameters))
+        
         y_tune_predict = classifier.predict(X_tune)
 
         if scoring == 'f1':
@@ -92,7 +65,7 @@ class HeldOutGridSearch(Sklearner, GridSearch):
 
     def setTuning(self, tuning):
         if tuning is not None:
-            self.X_tune, self.y_tune = zip(*tuning)
+            self.X_tune, self.y_tune = tuning
         else:
             self.X_tune, self.y_tune = None, None
         self.X_tune_transformed = False
@@ -126,4 +99,6 @@ class HeldOutGridSearch(Sklearner, GridSearch):
 
             self.classifier = bestClassifier
             
-                 
+            return bestClassifier
+
+        return None
