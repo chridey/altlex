@@ -1,6 +1,7 @@
-import nltk
-
+import itertools
 from collections import defaultdict
+
+import nltk
 
 from altlex.featureExtraction.dataPoint import DataPoint
 from altlex.featureExtraction import config
@@ -88,13 +89,15 @@ class FeatureExtractor:
 
     def getConnectiveUnistems(self, dataPoint):
         ret = {}
-        for stem in dataPoint.getAltlexStems():
+        for stem in dataPoint.getAltlexStem():
             ret['connective_unistem_' + stem] = True
-
+        return ret
+    
     def getConnectiveBistems(self, dataPoint):
         ret = {}
-        for stem in nltk.bigrams(dataPoint.getAltlexStems()):
+        for stem in nltk.bigrams(dataPoint.getAltlexStem()):
             ret['connective_unistem_' + '_'.join(stem)] = True
+        return ret
     
     def _getNstems(self, dataPoint, n, prefix=False):
         if prefix:
@@ -173,7 +176,7 @@ class FeatureExtractor:
     #semantic features
     #
 
-    def getFramenetScore(self, dataPoint, binary=True, trinary=False):
+    def getFramenetScore(self, dataPoint):
         #sum of probabilities of encoding causality for words for different parts of speech
         #stem and lowercase
         
@@ -201,8 +204,6 @@ class FeatureExtractor:
 
             score.update(self.fn.score(stems[start:end],
                                        poses[start:end],
-                                       binary=binary,
-                                       trinary=trinary,
                                        suffix=fragment))
 
         return {self.functionFeatures[self.getFramenetScore] + fragment :
@@ -342,3 +343,47 @@ class FeatureExtractor:
                 features.update(self.validFeatures[featureName](dataPoint))
         return features
 
+#make interaction features
+#combine everything that matches pattern a with pattern b
+def makeInteractionFeatures(features, pattern1, pattern2):
+    new_features = {}
+    for i in itertools.product(filter(lambda x:pattern1 in x, features.keys()),
+                               filter(lambda x:pattern2 in x, features.keys())):
+        new_features['_'.join(i)] = True
+    return new_features
+
+def filterFeatures(features, patterns=None, antipatterns=None):
+    new_features = {}
+    for feature in features:
+        if (patterns is None or any(pattern in feature for pattern in patterns)) and (antipatterns is None or not any(antipattern in feature for antipattern in antipatterns)):
+            new_features[feature] = features[feature]
+
+    return new_features
+
+def modifyFeatureSet(features, include=None, ablate=None, interaction=None):
+    if include:
+        features = filterFeatures(features,
+                                  include.split(','),
+                                  None)
+        
+    if ablate:
+        features = filterFeatures(features,
+                                  None,
+                                  ablate.split(','))
+                
+    if interaction:
+        filtered_features = filterFeatures(features,
+                                           interaction['include'],
+                                           interaction['ablate'])
+                                                                    
+        interaction_features = makeInteractionFeatures(filtered_features,
+                                                       interaction['first'],
+                                                       interaction['second'])
+        features.update(interaction_features)
+
+    return features
+
+def createModifiedDataset(dataset, include=None, ablate=None, interaction=None):
+    for data in dataset:
+        data.features = modifyFeatureSet(data.features, include, ablate, interaction)
+    return dataset

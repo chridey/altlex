@@ -43,7 +43,7 @@ class DataPoint:
 
     def getAltlexLemmasAndPos(self):
         if self.altlexLength > 0:
-            return self.getCurrLemmas()[:self.altlexLength] + self.getAltlexPos()
+            return self.getAltlexLemmatized() + self.getAltlexPos()
         else:
             return []
         
@@ -63,7 +63,7 @@ class DataPoint:
     
     def getAltlexLemmatized(self):
         if self.altlexLength > 0:
-            return self.getCurrLemmas()[:self.altlexLength]
+            return [i.decode('utf-8') for i in self.getCurrLemmas()[:self.altlexLength]]
         else:
             return []
 
