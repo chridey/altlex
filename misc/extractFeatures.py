@@ -19,8 +19,7 @@ def main(alignedLabelsIterator,
     dataset = DataPointMetadataList()
     for sentenceId,datumId,dataPoint,label in alignedLabelsIterator.iterData(sentenceIndices,
                                                                              datumIndices,
-                                                                             verbose=True,
-                                                                             modBy=100):    
+                                                                             modBy=10000):    
         features = featureExtractor.addFeatures(dataPoint)
         dataset.append(DataPointMetadata(dataPoint, features, label, datumId, sentenceId))
             

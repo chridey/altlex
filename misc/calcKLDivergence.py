@@ -97,14 +97,17 @@ if __name__ == '__main__':
         alignments = f.read().splitlines()
     labelsFile = sys.argv[3]
     suffix = sys.argv[4]
-
-    if len(sys.argv) > 5:
-        percentTrain = float(sys.argv[5])
+    combined = int(sys.argv[5])
     
-    alignedLabelsIterator = AlignedParsedPairIterator(parallelParseDir, alignments)
+    if len(sys.argv) > 6:
+        percentTrain = float(sys.argv[6])
+    
+    alignedLabelsIterator = AlignedParsedPairIterator(parallelParseDir,
+                                                      alignments,
+                                                      combined=combined)
     alignedLabelsIterator.load(labelsFile)
 
-    if len(sys.argv) > 5:
+    if len(sys.argv) > 6:
         maxIndex = int(percentTrain*alignedLabelsIterator.numSentences)
         sentenceIndices = set(range(maxIndex))
     else:
