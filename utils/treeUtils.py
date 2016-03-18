@@ -49,7 +49,7 @@ def getLeftSiblings(startIndex, parse):
         node = node[:-1]
     return siblings
 
-def getConnectives(parse,
+def getConnectives2(parse,
                    maxLen=4,
                    content=('VB', 'NN', 'RB', 'JJ'),
                    invalid=frozenset(('NNP', 'NNPS', 'SYM', ',', '(', ')', '"', "'", ';')),
@@ -126,6 +126,88 @@ def getConnectives(parse,
                 foundIndices.update(range(i,i+length))
                 ret.append((i,i+length))
 
+    return ret
+
+
+def getConnectives(parse,
+                   maxLen=7,
+                   content=frozenset(('VB', 'NN', 'RB', 'JJ')),
+                   invalid=frozenset(('NNP', 'NNPS', 'SYM', ',', '(', ')', '"', "'", ';')),
+                   validLeftSiblings=frozenset(('V', 'N', 'S')),
+                   validRightSiblings=frozenset(('V', 'N', 'S')),                   
+                   blacklist=(),
+                   whitelist=(),
+                   pos=None,
+                   leaves=None,
+                   verbose=False):
+
+    '''
+    find the shortest non-subset phrases that satisfy all conditions
+
+    blacklist - disallow these exact phrases (they also dont count as content words)
+    whitelist - allow these exact phrases regardless of the P-O-S in content
+    '''
+
+    ret = []
+    if pos is None:
+        pos = list(zip(*parse.pos()))[1]
+    if leaves is None:
+        leaves = parse.leaves()
+    
+    leftSiblings = []
+    rightSiblings = []
+    for i in range(len(leaves)):
+        rightSiblings.append({i[:1] for i in getRightSiblings(i, parse) if i is not None})
+        leftSiblings.append({i[:1] for i in getLeftSiblings(i, parse) if i is not None})
+
+    #first go through the whitelist longest phrase to shortest and find any phrases that match and also satisfy
+    #the valid right siblings
+    foundIndices = set()
+    for length in list(range(1, max(len(i) for i in whitelist)+1))[::-1]:
+        #go through from longest to shortest
+        #only add shorter phrases if they do not overlap with a longer phrase
+        for i in range(len(leaves)-length):
+            if len(set(range(i,i+length)) & foundIndices):
+                continue
+            
+            ls = leftSiblings[i]
+            rs = rightSiblings[i+length]
+
+            if not(len(ls & validLeftSiblings) and len(rs & validRightSiblings)):
+                continue
+
+            #allow adding preposition at beginning or end
+            if (tuple(leaves[i:i+length]) in whitelist) or (tuple(leaves[i:i+length-1]) in whitelist and pos[i+length-1] in ('IN', 'TO')) or (tuple(leaves[i+1:i+length]) in whitelist and pos[i] in ('IN', 'TO')):
+                foundIndices.update(range(i,i+length))
+                ret.append((i,i+length))
+
+    for length in range(1, maxLen+1):
+        for i in range(len(leaves)-length):
+            if len(set(range(i,i+length)) & foundIndices):
+                continue
+
+            ls = leftSiblings[i]
+            rs = rightSiblings[i+length] 
+            phrase = leaves[i:i+length]
+            if verbose:
+                print(i, i+length, phrase, ls, rs)
+
+            if len(set(pos[i:i+length]) & invalid):
+                continue
+            if tuple(leaves[i:i+length]) in blacklist:
+                continue
+
+            if not(len(ls & validLeftSiblings) and len(rs & validRightSiblings)):
+                continue
+
+            #only allow one content word 
+            totalContent = sum(pos[x][:2] in content and (leaves[x],) not in blacklist for x in range(i, i+length))
+            if not totalContent:
+                continue
+                        
+            ret.append((i,i+length))
+            foundIndices.update(set((i,i+length)))
+            
     return ret
 
 def getParentNodes(index, parse):
