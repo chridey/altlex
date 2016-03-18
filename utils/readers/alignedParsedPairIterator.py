@@ -6,6 +6,7 @@ import collections
 
 from altlex.utils import wordUtils
 from altlex.utils import dependencyUtils
+from altlex.utils.readers.parseMetadata import ParseMetadata
 from altlex.utils.readers.parsedPairIterator import ParsedPairIterator, getLemmas, getPossibleAltlexes
 from altlex.featureExtraction.dataPoint import DataPoint
 
@@ -62,7 +63,7 @@ def getAlignedAltlexes(alignment, lemmas, altlexes, verbose=False):
 
 
 class AlignedParsedPairIterator(ParsedPairIterator):
-    def __init__(self, indir, alignments, verbose=False):
+    def __init__(self, indir, alignments, verbose=False, combined=False):
         ParsedPairIterator.__init__(self, indir, verbose)
         self.alignments = alignments
 
@@ -72,15 +73,16 @@ class AlignedParsedPairIterator(ParsedPairIterator):
         #list of list of tuples ((sent0Start, sent0End), (sent1Start, sent1End)) 
         self.altlexes = []  
 
-        self.labelLookup = {}
+        self._labelLookup = {}
+        self.combined = combined
 
     @property
     def numSentences(self):
         return len(self.altlexes)
         
     def makeLabels(self, seedSet, labelLookup):
-        self.labelLookup = labelLookup
-        self.reverseLabelLookup = {j:i for i,j in self.labelLookup.items()}
+        self._labelLookup = labelLookup
+        self._reverseLabelLookup = {j:i for i,j in self._labelLookup.items()}
         
         for index,pair in enumerate(self.__iter__()):
             if self.verbose:
@@ -185,8 +187,6 @@ class AlignedParsedPairIterator(ParsedPairIterator):
                 yield metaLabel,stems1,stems2,weighting
                 yield metaLabel,stems2,stems1,weighting
 
-                datumId += 1
-
     def iterMetaLabels(self, sentenceIndices=None, datumIndices=None):
         for sentenceId, datumId, label, altlex, pair in self.iterLabeledAltlexes(sentenceIndices,
                                                                                  datumIndices):
@@ -199,6 +199,20 @@ class AlignedParsedPairIterator(ParsedPairIterator):
             return self.reverseLabelLookup[label]
         else:
             return 'other'
+
+    @property
+    def reverseLabelLookup(self):
+        if self.combined:
+            return {i:j if j not in ('reason', 'result') else 'causal' for i,j in self._reverseLabelLookup.items()}
+        else:
+            return self._reverseLabelLookup
+    
+    @property
+    def labelLookup(self):
+        if self.combined:
+            return {i:j if i not in ('reason', 'result') else 1 for i,j in self._labelLookup.items()}
+        else:
+            return self._labelLookup
 
     def getValidSentenceIndices(self):
         #return only those indices that contain a non-empty list of labels
@@ -216,67 +230,23 @@ class AlignedParsedPairIterator(ParsedPairIterator):
 
     def save(self, labelsFile):
         with gzip.open(labelsFile, 'w') as f:
-            json.dump([self.labels, self.altlexes, self.labelLookup], f)
+            json.dump([self.labels, self.altlexes, self._labelLookup], f)
 
     def load(self, labelsFile):
         with gzip.open(labelsFile) as f:
-            self.labels, self.altlexes, self.labelLookup = json.load(f)
-        self.reverseLabelLookup = {j:i for i,j in self.labelLookup.items()}
+            self.labels, self.altlexes, self._labelLookup = json.load(f)
+        self._reverseLabelLookup = {j:i for i,j in self._labelLookup.items()}
         
-    def iterData(self, sentenceIndices=None, datumIndices=None, verbose=False, modBy=10000):
+    def iterData(self, sentenceIndices=None, datumIndices=None, modBy=10000):
         for sentenceId, datumId, label, altlex, pair in self.iterLabeledAltlexes(sentenceIndices,
                                                                                  datumIndices):
 
-            if verbose and sentenceId % modBy == 0:
+            if self.verbose and sentenceId % modBy == 0:
                 print(sentenceId)
                 
-            words = [[i.lower().encode('utf-8') for i in getLemmas(pair[0]['words'])],
-                      [i.lower().encode('utf-8') for i in getLemmas(pair[1]['words'])]]        
-
-            lemmas = [[i.lower().encode('utf-8') for i in getLemmas(pair[0]['lemmas'])],
-                      [i.lower().encode('utf-8') for i in getLemmas(pair[1]['lemmas'])]]        
-            pos = [getLemmas(pair[0]['pos']),
-                   getLemmas(pair[1]['pos'])]
-            ner = [getLemmas(pair[0]['ner']),
-                   getLemmas(pair[1]['ner'])]
-            stems = [[wordUtils.snowballStemmer.stem(wordUtils.replaceNonAscii(i)) for i in lemmas[0]],
-                     [wordUtils.snowballStemmer.stem(wordUtils.replaceNonAscii(i)) for i in lemmas[1]]]
-
-            combinedDependencies = []
-            for pairIndex,half in enumerate(pair):
-                partialDependencies = []
-                for depIndex,dep in enumerate(half['dep']):
-                    partialDependencies.append(dependencyUtils.tripleToList(dep, len(pair[pairIndex]['lemmas'][depIndex])))
-                combinedDependencies.append(dependencyUtils.combineDependencies(*partialDependencies))
-
-            #TODO: handle dependencies
-            #if two sentences, don't need to really do anything (except remove altlex from deps)
-            #if one sentence, call splitDependencies
-
             for i,which in enumerate(altlex):
-                newDependencies = dependencyUtils.splitDependencies(combinedDependencies[i],
-                                                                    (which[0],
-                                                                     which[1]))
-                dataPoint = {'altlexLength': which[1]-which[0],
-                             'sentences': [{
-                                 'lemmas': lemmas[i][which[0]:],
-                                 'words': words[i][which[0]:],
-                                 'stems': stems[i][which[0]:],
-                                 'pos': pos[i][which[0]:],
-                                 'ner': ner[i][which[0]:],
-                                 'dependencies': newDependencies['curr']
-                                 },
-                                           {
-                                               'lemmas': lemmas[i][:which[0]],
-                                               'words': words[i][:which[0]],
-                                               'stems': stems[i][:which[0]],
-                                               'pos': pos[i][:which[0]],
-                                               'ner': ner[i][:which[0]],
-                                               'dependencies': newDependencies['prev']
-                                               }],
-                             'altlex': {'dependencies': newDependencies['altlex']}
-                             }
+                parse = ParseMetadata(pair[i])
 
-                dp = DataPoint(dataPoint)
+                dp = parse.datapoint(which[0], which[1]) 
                 yield sentenceId, datumId, dp, label
                     

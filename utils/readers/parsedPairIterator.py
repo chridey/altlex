@@ -71,6 +71,16 @@ class ParsedPairIterator:
         self.verbose = verbose
 
     def __iter__(self):
+        for filename,data in self.iterFiles():
+            assert(len(data) % 2 == 0)
+            ret = []
+            for index,sentence in enumerate(data):
+                ret.append(sentence)
+                if len(ret) == 2:
+                    yield ret
+                    ret = []
+
+    def iterFiles(self):
         for filename in sorted(os.listdir(self.indir)):
             if self.verbose:
                 print(filename)
@@ -79,10 +89,4 @@ class ParsedPairIterator:
             with gzip.open(os.path.join(self.indir, filename)) as f:
                 j = json.load(f)
 
-            assert(len(j) % 2 == 0)
-            ret = []
-            for index,sentence in enumerate(j):
-                ret.append(sentence)
-                if len(ret) == 2:
-                    yield ret
-                    ret = []
+            yield filename,j
