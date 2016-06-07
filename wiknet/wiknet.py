@@ -1,5 +1,6 @@
 import collections
 import operator
+import os
 
 import numpy as np
 
@@ -34,7 +35,10 @@ def getLemmas(lemmas):
     return reduce(operator.add, lemmas)
 
 class WikNetMatch:
-    def __init__(self, filename='/proj/nlp/users/chidey/simplification/WikNet_word_pairs',
+    def __init__(self, filename=os.path.join(os.path.join(os.path.join(os.path.dirname(__file__),
+                                                                       '..'),
+                                                          'config'),
+                                             'WikNet_word_pairs'),
                  scores = None,
                  idf = None):
         if scores is not None:

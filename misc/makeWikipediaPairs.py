@@ -21,9 +21,9 @@ from altlex.wiknet import parallelWikipedia
 logger = logging.getLogger(__file__)
 
 #batch wiknetmatch for parallelization
-def wiknetBatch(batchIndex, batch, penalty=0, wn=None):
+def wiknetBatch(batchIndex, batch, penalty=0, wn=None, scoresFile=None):
     if wn is None:
-        with gzip.open('/local/nlp/chidey/simplification/scores.json.gz') as f:
+        with gzip.open(scoresFile) as f:
             s = json.load(f)
         wn = wiknet.WikNetMatch(scores=s)
     scores = []
@@ -68,7 +68,7 @@ if __name__ == '__main__':
     metric = 'cosine'
     sentRep = sentenceRepresentation.PairedSentenceEmbeddingsClient(wikiFilename,
                                                                     modelFilename)
-    wn = wiknet.WikNetMatch('/local/nlp/chidey/simplification/WikNet_word_pairs')
+    wn = wiknet.WikNetMatch()
     thresh = .5
     penalty = 'both'
 
