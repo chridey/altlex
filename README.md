@@ -66,6 +66,7 @@ python ~/altlex/misc/extractFeatures.py parsed_pairs moses/model/aligned.grow-di
 This is a gzipped, JSON-formatted file.  The "titles" array is the shared title name of the English and Simple Wikipedia articles.  The "articles" array consists of two arrays and each of those arrays must be the same length as the "titles" array and the indices into these arrays must point to the aligned articles and titles.  Each article within the articles array is an array of tokenized sentence strings (but not word tokenized).
 
 The format of the dictionary is as follows:
+```
 {'files': [english_name, simple_name],
 
  'articles': [
@@ -91,6 +92,7 @@ The format of the dictionary is as follows:
   titles': [title_1_string, title_2_string, ...]
 
 }
+```
 
 ### Parsed Pairs Format
 
