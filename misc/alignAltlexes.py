@@ -11,7 +11,7 @@ if __name__ == '__main__':
     prefix = sys.argv[3]
     initLabelsFile = prefix + '_initLabels.json.gz'
 
-    if sys.argv[4] == '0':
+    if sys.argv[4] == '1':
         seedSet, labelLookup = wordUtils.binaryCausalSettings
     else:
         seedSet, labelLookup = wordUtils.trinaryCausalSettings
