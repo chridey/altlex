@@ -45,7 +45,7 @@ Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv
 2. Format pairs for input to MOSES (version 2.1 was used for all experiments):
    
   ```
-  python altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences```
+  python altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences
   lmplz -o 3 < $english_sentences > $english_language_model
   perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus --f $english_sentences --e $simple_sentences --root-dir . --lm 0:3:$english_language_model -mgiza
   ```
