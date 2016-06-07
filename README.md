@@ -19,7 +19,7 @@ KenLM
 
 ##How To
 
-For the entire pipeline, start at step 0a using the Simple and English Wikipedia dumps in the format "Parallel Wikipedia Format".
+For the entire pipeline, start at step 1.i using the Simple and English Wikipedia dumps in the format "Parallel Wikipedia Format".
 
 Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv```), parse the paraphrase pairs in the format "Parsed Pairs Format", save the files into ```$parsed_pairs_directory```, and start at step 3.
 
