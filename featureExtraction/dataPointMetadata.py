@@ -88,6 +88,10 @@ class DataPointMetadata:
     def CSV(self):
         return self.sentenceId,self.datumId,(' '.join(self.words[0])).encode('utf-8'),(' '.join(self.words[1])).encode('utf-8'),(' '.join(self.words[2])).encode('utf-8')
 
+    @property
+    def testCSV(self):
+        return (' '.join(self.words[0])).encode('utf-8'),(' '.join(self.words[1])).encode('utf-8'),(' '.join(self.words[2])).encode('utf-8'),self.label
+
 class DataPointMetadataList(list):
     def __init__(self, *args, **kwargs):
         list.__init__(self, *args, **kwargs)
@@ -148,6 +152,15 @@ class DataPointMetadataList(list):
             csvwriter.writerow(fieldnames)
             for i in self:
                 csvwriter.writerow(i.CSV)
+
+    def testCSV(self, csvfile):
+        fieldnames = ['prevWords', 'altlex', 'currWords', 'label']
+        with open(csvfile, 'wb') as f:
+            csvwriter = csv.writer(f,
+                                   delimiter='\t')
+            csvwriter.writerow(fieldnames)
+            for i in self:
+                csvwriter.writerow(i.testCSV)
 
     def matchWithCSV(self, csvfile, labelLookup):
         lookup = {}
