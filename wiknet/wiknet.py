@@ -387,7 +387,7 @@ if __name__ == '__main__':
     import json
     import os
     
-    from chnlp.word2vec import sentenceRepresentation
+    from altlex.embeddings import sentenceRepresentation
     
     parsedData = sys.argv[1]
     annotatedData = sys.argv[2]
