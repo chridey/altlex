@@ -23,39 +23,53 @@ For the entire pipeline, start at step 0a using the Simple and English Wikipedia
 
 Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv```), parse the paraphrase pairs in the format "Parsed Pairs Format", save the files into ```$parsed_pairs_directory```, and start at step 3.
 
-0a) Parse data and save in the format "Parsed Wikipedia Format" in the directory ```$parsed_wikipedia_directory``` (there can be multiple files in this directory).
+0. Preprocess data
+    1. Parse data and save in the format "Parsed Wikipedia Format" in the directory ```$parsed_wikipedia_directory``` (there can be multiple files in this directory).
+    2. Create word and sentence embeddings using ```gensim``` and save the model file as ```$embeddings_file```.
 
-0b) Create word and sentence embeddings using ```gensim``` and save the model file as ```$embeddings_file```.
-
-1) Find paraphrase pairs from English and Simple Wikipedia 
-  1a) Start the embeddings server (it may take a while to load the embeddings and data).
+1. Find paraphrase pairs from English and Simple Wikipedia 
+    1. Start the embeddings server (it may take a while to load the embeddings and data):
+      
       ```python altlex/embeddings/representationServer.py```
-  1b) Determine possible paraphrase pairs and create the file ```$matches_file```
+
+    2. Determine possible paraphrase pairs and create the file ```$matches_file```:
+      
       ```python altlex/misc/makeWikipediaPairs.py $embeddings_file $parallel_wikipedia_file $parsed_wikipedia_directory $matches_file $num_processes (optional) $start_point (optional)```
-  1c) Restrict the output to be above the thresholds and make sure all pairs are 1-to-1.
+    
+    3. Restrict the output to be above the thresholds and make sure all pairs are 1-to-1.
+      
       ```python altlex/misc/getGreedyMatches.py $matches_file $min_doc2vec_score $min_wiknet_score $wiknet_penalty > $reduced_matches_file ```
-  1d) Create the directory ```$parsed_pairs_directory``` with files of the format "Parsed Pairs Format" using the output of 1c.
+      
+    4. Create the directory ```$parsed_pairs_directory``` with files of the format "Parsed Pairs Format" using the output of 1c.
   
-2) Format pairs for input to MOSES (version 2.1 was used for all experiments)
-   ```python altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences```
-   ```lmplz -o 3 < $english_sentences > $english_language_model```
-   ```perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus --f $english_sentences --e $simple_sentences --root-dir . --lm 0:3:$english_language_model -mgiza```
+2. Format pairs for input to MOSES (version 2.1 was used for all experiments):
+   
+  ```
+  python altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences```
+  lmplz -o 3 < $english_sentences > $english_language_model
+  perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus --f $english_sentences --e $simple_sentences --root-dir . --lm 0:3:$english_language_model -mgiza
+  ```
 
-3) Determine possible new altlexes by using the word alignments to determine phrases that align with known connectives
-   ```$binary_flag``` should be 1 if predicting causal vs non-causal and 0 if predicting causal vs reason vs result
-   ```python altlex/misc/alignAltlexes.py $parsed_pairs_directory model/aligned.grow-diag-final $session_name $binary_flag```
+3. Determine possible new altlexes by using the word alignments to determine phrases that align with known connectives 
+   (```$binary_flag``` should be 1 if predicting causal vs non-causal and 0 if predicting causal vs reason vs result):
+   
+  ```python altlex/misc/alignAltlexes.py $parsed_pairs_directory model/aligned.grow-diag-final $session_name $binary_flag```
 
-4) Make KLD weights
-   ```python altlex/misc/calcKLDivergence.py <parsed_pairs_directory> model/aligned.grow-diag-final ${session_name}_initLabels.json.gz ${kld_name}.kldt $binary_flag```
+4. Make KLD weights
+   
+  ```python altlex/misc/calcKLDivergence.py <parsed_pairs_directory> model/aligned.grow-diag-final ${session_name}_initLabels.json.gz ${kld_name}.kldt $binary_flag```
 
-5) Make feature set (see "Feature Extractor Config Format" for $json_config)
-   ```python altlex/misc/extractFeatures.py parsed_pairs model/aligned.grow-diag-final ${session_name}_initLabels.json.gz $features_file  $json_config```
+5. Make feature set (see "Feature Extractor Config Format" for $json_config)
+  
+  ```python altlex/misc/extractFeatures.py parsed_pairs model/aligned.grow-diag-final ${session_name}_initLabels.json.gz $features_file  $json_config```
 
-6) Train model
+6. Train model (see the ablation directory for example commands run)
+   
+  ```python altlex/misc/trainFeatureWeights.py $features_file```
 
-6a) Train model with bootstrapping
+7. Train model with bootstrapping
 
-(see the ablation directory for example commands run)
+  ```python altlex/misc/bootstrapping.py $features_file $parsed_pairs_directory ${session_name}_initLabels.json.gz```
 
 ##Data Format
 
