@@ -4,11 +4,17 @@ Git repository for software associated with the 2016 ACL paper "Identifying Caus
 
 ##Dependencies
 flask
+
 gensim
+
 nltk
+
 numpy
+
 requests
+
 scipy
+
 sklearn
 
 MOSES
@@ -21,14 +27,14 @@ Given the data provided with the ACL submission (altlex_train_paraphrases.tsv), 
 
 0a) Parse data 
 
-0b) Create word and document embeddings using ```gensim``` and save the model file as <embeddings_file>.
+0b) Create word and sentence embeddings using ```gensim``` and save the model file as <embeddings_file>.
 
 1) Find paraphrase pairs from English and Simple Wikipedia 
   1a) Start the embeddings server (it may take a while to load the embeddings and data)
       python altlex/embeddings/representationServer.py
   1b) 
       python altlex/misc/makeWikipediaPairs.py <embeddings_file> <parallel_wikipedia_file> <parsed_wikipedia_directory> <matches_file> <num_processes (optional)> <start_point (optional)>
-  1c) Restrict the output to be above the thresholds, and make sure all pairs are 1-to-1
+  1c) Restrict the output to be above the thresholds and make sure all pairs are 1-to-1.
       python altlex/misc/getGreedyMatches.py <matches_file> .69 .65 .75 
 
 2) Format pairs 
@@ -54,3 +60,24 @@ python ~/altlex/misc/extractFeatures.py parsed_pairs moses/model/aligned.grow-di
 (see the ablation directory for example commands run)
 
 ##Data Format
+
+###Parallel Wikipedia Format
+
+This is a gzipped, JSON-formatted file.  The "titles" array is the shared title name of the English and Simple Wikipedia articles.  The "articles" array consists of two arrays and each of those arrays must be the same length as the "titles" array and the indices into these arrays must point to the aligned articles and titles.  Each article within the articles array is an array of tokenized sentence strings (but not word tokenized).
+
+The format of the dictionary is as follows:
+{'files': [english_name, simple_name],
+ 'articles': [
+              [[article_1_sentence_1_string, article_1_sentence_2_string, ...],
+               [article_2_sentence_1_string, article_2_sentence_2_string, ...],
+               ...
+              ],
+              [[article_1_sentence_1_string, article_1_sentence_2_string, ...],
+               [article_2_sentence_1_string, article_2_sentence_2_string, ...],
+               ...
+              ]
+             ],
+  
+  titles': [title_1_string, title_2_string, ...]
+}
+
