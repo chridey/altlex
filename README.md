@@ -14,6 +14,7 @@ sklearn
 ```
 
 MOSES
+
 KenLM
 
 ##How To
@@ -36,19 +37,19 @@ Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv
   1d) Create the directory ```$parsed_pairs_directory``` with files of the format "Parsed Pairs Format" using the output of 1c.
   
 2) Format pairs for input to MOSES (version 2.1 was used for all experiments)
-   ```python ~/altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences```
+   ```python altlex/misc/formatMoses.py $parsed_pairs_directory corpus/$english_sentences corpus/$simple_sentences```
    ```lmplz -o 3 < $english_sentences > $english_language_model```
-   ```perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus --f $english_sentences --e $simple_sentences --root-dir . --lm 0:3:$english_language_model -mgiza
+   ```perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus --f $english_sentences --e $simple_sentences --root-dir . --lm 0:3:$english_language_model -mgiza```
 
 3) Determine possible new altlexes by using the word alignments to determine phrases that align with known connectives
-#for trinary
-python ~/altlex/misc/alignAltlexes.py parsed_pairs moses/model/aligned.grow-diag-final wash_plus 1
+   ```$binary_flag``` should be 1 if predicting causal vs non-causal and 0 if predicting causal vs reason vs result
+   ```python altlex/misc/alignAltlexes.py $parsed_pairs_directory model/aligned.grow-diag-final $session_name $binary_flag```
 
 4) Make KLD weights
-python ~/altlex/misc/calcKLDivergence.py parsed_pairs moses/model/aligned.grow-diag-final aligned_labeled/wash_plus_initLabels_mod.json.gz wash_plus.kldt
+   ```python altlex/misc/calcKLDivergence.py <parsed_pairs_directory> model/aligned.grow-diag-final ${session_name}_initLabels.json.gz ${kld_name}.kldt $binary_flag```
 
-5) Make feature set
-python ~/altlex/misc/extractFeatures.py parsed_pairs moses/model/aligned.grow-diag-final aligned_labeled/wash_plus_initLabels_mod.json.gz features.json.gz featureExtractor.config.json
+5) Make feature set (see "Feature Extractor Config Format" for $json_config)
+   ```python altlex/misc/extractFeatures.py parsed_pairs model/aligned.grow-diag-final ${session_name}_initLabels.json.gz $features_file  $json_config```
 
 6) Train model
 
@@ -64,8 +65,8 @@ This is a gzipped, JSON-formatted file.  The "titles" array is the shared title 
 
 The format of the dictionary is as follows:
 ```
-{'files': [english_name, simple_name],
- 'articles': [
+{"files": [english_name, simple_name],
+ "articles": [
               [[article_1_sentence_1_string, article_1_sentence_2_string, ...],
                [article_2_sentence_1_string, article_2_sentence_2_string, ...],
                ...
@@ -75,7 +76,7 @@ The format of the dictionary is as follows:
                ...
               ]
              ],
-  'titles': [title_1_string, title_2_string, ...]
+  "titles": [title_1_string, title_2_string, ...]
 }
 ```
 
@@ -86,9 +87,9 @@ The data is formatted as follows:
 ```
 [
  {
-  'index': article_index,
-  'title': article_title_string,
-  'sentences': [[parsed_sentence_1, parsed_sentence_2, ...],
+  "index": article_index,
+  "title": article_title_string,
+  "sentences": [[parsed_sentence_1, parsed_sentence_2, ...],
                 [parsed_sentence_1, parsed_sentence_2, ...]
                ]
  },
@@ -116,11 +117,36 @@ The data is formatted as follows:
 Each parsed sentence is of the following format:
 ```
 {
-   'dep': [[[governor_index, dependent_index, relation_string], ...], ...], 
-   'lemmas': [[lemma_1_string, lemma_2_string, ...], ...],
-   'pos': [[pos_1_string, pos_2_string, ...], ...],
-   'parse': [parenthesized_parse_1_string, ...], 
-   'words': [[word_1_string, word_2_string, ...], ...] , 
-   'ner': [[ner_1_string, ner_2_string, ...], ...]
+   "dep": [[[governor_index, dependent_index, relation_string], ...], ...], 
+   "lemmas": [[lemma_1_string, lemma_2_string, ...], ...],
+   "pos": [[pos_1_string, pos_2_string, ...], ...],
+   "parse": [parenthesized_parse_1_string, ...], 
+   "words": [[word_1_string, word_2_string, ...], ...] , 
+   "ner": [[ner_1_string, ner_2_string, ...], ...]
 }
 ```  
+
+### Feature Extractor Config Format
+```
+{"framenetSettings": 
+   {"binary": true/false}, 
+ "featureSettings": 
+   {
+   "arguments_cat_curr": true/false, 
+   "arguments_verbnet_prev": true/false, 
+   "head_word_cat_curr": true/false, 
+   "head_word_verbnet_prev": true/false, 
+   "head_word_verbnet_altlex": true/false, 
+   "head_word_cat_prev": true/false, 
+   "head_word_cat_altlex": true/false, 
+   "kld_score": true/false, 
+   "head_word_verbnet_curr": true/false, 
+   "arguments_verbnet_curr": true/false, 
+   "framenet": true/false, 
+   "arguments_cat_prev": true/false, 
+   "connective": true/false
+   }, 
+ "kldSettings": 
+   {"kldDir": $kld_name}
+}
+```
