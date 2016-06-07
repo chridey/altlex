@@ -37,7 +37,7 @@ Given the data provided with the ACL submission (altlex_train_paraphrases.tsv), 
   1c) Restrict the output to be above the thresholds and make sure all pairs are 1-to-1.
       python altlex/misc/getGreedyMatches.py <matches_file> .69 .65 .75 
 
-2) Format pairs 
+2) Format pairs for input to MOSES (version 2.1 was used for all experiments)
 python ~/altlex/misc/formatMoses.py parsed_pairs moses/english moses/simple
 lmplz -o 3 < english_mod > lm.english_plus
 perl train-model.perl --external-bin-dir moses/RELEASE-2.1/binaries/linux-64bit/training-tools/ --corpus corpus/corpus --f simple_plus --e english_plus --root-\
@@ -67,17 +67,45 @@ This is a gzipped, JSON-formatted file.  The "titles" array is the shared title 
 
 The format of the dictionary is as follows:
 {'files': [english_name, simple_name],
+
  'articles': [
+ 
               [[article_1_sentence_1_string, article_1_sentence_2_string, ...],
+              
                [article_2_sentence_1_string, article_2_sentence_2_string, ...],
+               
                ...
+               
               ],
+              
               [[article_1_sentence_1_string, article_1_sentence_2_string, ...],
+              
                [article_2_sentence_1_string, article_2_sentence_2_string, ...],
+               
                ...
+               
               ]
+              
              ],
   
   titles': [title_1_string, title_2_string, ...]
+
 }
+
+### Parsed Pairs Format
+
+This is a gzipped, JSON-formatted list of parsed sentences.  Paraphrase pairs are consecutive even and odd indices.
+
+The data is formatted as follows:
+[
+  {
+   'dep': [[[governor_index, dependent_index, relation_string], ...], ...], 
+   'lemmas': [[lemma_1_string, lemma_2_string, ...], ...],
+   'pos': [[pos_1_string, pos_2_string, ...], ...],
+   'parse': [parenthesized_parse_1_string, ...], 
+   'words': [[word_1_string, word_2_string, ...], ...] , 
+   'ner': [[ner_1_string, ner_2_string, ...], ...]
+  },
+  ...
+]
 
