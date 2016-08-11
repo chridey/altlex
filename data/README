@@ -1,0 +1,14 @@
+altlex_train_paraphrases.tsv - paraphrases derived from English and Simple Wikipedia, respectively
+altlex_dev.tsv - grad student annotated data
+altlex_gold.tsv - CrowdFlower annotated data
+
+Formatting:
+All data is tab-separated.
+
+The columns for train are the English and Simple sentence.
+
+The columns for altlex_dev and altlex_gold are prevWords, altlex, currWords, and label.
+prevWords - text before the altlex
+altlex - the altlex itself
+currWords - text after the altlex
+label - 0, 1, or 2 representing none, reason, or result, respectively
