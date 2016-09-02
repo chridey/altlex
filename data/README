@@ -1,4 +1,6 @@
 altlex_train_paraphrases.tsv - paraphrases derived from English and Simple Wikipedia, respectively
+altlex_train.tsv - distant labeled data with causal and non-causal connectives
+altlex_train_bootstrapped.tsv - distant labeled data after two rounds of bootstrapping
 altlex_dev.tsv - grad student annotated data
 altlex_gold.tsv - CrowdFlower annotated data
 
@@ -12,3 +14,13 @@ prevWords - text before the altlex
 altlex - the altlex itself
 currWords - text after the altlex
 label - 0, 1, or 2 representing none, reason, or result, respectively
+
+The columns for altlex_train and altlex_train_bootstrapped are label, englishPrevWords, englishAltlex, englishCurrWords, simplePrevWords, simpleAltlex, simpleCurrWords.
+label - 0 or 1 representing non-causal or causal
+englishPrevWords - text before the altlex for the sentence from English Wikipedia
+englishAltlex - the altlex itself for the sentence from English Wikipedia
+englishCurrWords - text after the altlex for the sentence from English Wikipedia
+simplePrevWords - text before the altlex for the sentence from Simple Wikipedia
+simpleAltlex - the altlex itself for the sentence from Simple Wikipedia
+simpleCurrWords - text after the altlex for the sentence from Simple Wikipedia
+
