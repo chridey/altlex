@@ -164,3 +164,14 @@ Each parsed sentence is of the following format:
    {"kldDir": $kld_name}
 }
 ```
+
+### Data Point Format ###
+It is also possible to run the feature extractor directly on a single data point.  From the ```featureExtraction``` module create a ```FeatureExtractor``` object and call the method ```addFeatures``` on a ```DataPoint``` object (note that this does not create any interaction features, for that you will also need to call ```makeInteractionFeatures```).  The ```DataPoint``` class takes a dictionary as input, in the following format:
+```
+{
+"sentences": {[{"ner": [...], "pos": [...], "words": [...], "stems": [...], "lemmas": [...], "dependencies": [...]}, {...}]}
+"altlexLength": integer,
+"altlex": {"dependencies": [...]}
+}
+```
+The sentences list is the pair of sentences/spans where the second span begins with the altlex.  Dependencies must be a list where at index i there is a dependency relation string and governor index integer or a NoneType.  Index i into the words list is the dependent of this relation.  To split single sentence dependency relations, use the function ```splitDependencies``` in ```utils.dependencyUtils```.
