@@ -174,4 +174,4 @@ It is also possible to run the feature extractor directly on a single data point
 "altlex": {"dependencies": [...]}
 }
 ```
-The sentences list is the pair of sentences/spans where the second span begins with the altlex.  Dependencies must be a list where at index i there is a dependency relation string and governor index integer or a NoneType.  Index i into the words list is the dependent of this relation.  To split single sentence dependency relations, use the function ```splitDependencies``` in ```utils.dependencyUtils```.
+The sentences list is the pair of sentences/spans where the first span begins with the altlex.  Dependencies must be a list where at index i there is a dependency relation string and governor index integer or a NoneType.  Index i into the words list is the dependent of this relation.  To split single sentence dependency relations, use the function ```splitDependencies``` in ```utils.dependencyUtils```.
