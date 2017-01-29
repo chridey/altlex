@@ -3,6 +3,87 @@ import re
 
 from nltk import Tree
 
+from altlex.utils.wordUtils import findPhrase
+from altlex.utils.dependencyUtils import splitDependencies
+
+def findAltlexes(words, altlexes):
+    ranges = {} #lookup by index
+    starts = {} #lookup by phrase
+    for phrase in altlexes:
+        start = findPhrase(phrase, words)
+        if start is None:
+            continue
+        end = start+len(phrase)
+        
+        #check for overlap between other phrases
+        currRange = set(range(start, end))
+        currPhrase = list(phrase)
+        overlap = currRange & set(ranges.keys())
+        if len(overlap):
+            prevPhrase = ranges[list(overlap)[0]]
+            prevRange = set(range(starts[prevPhrase], starts[prevPhrase]+len(prevPhrase)))
+            
+            #if its completely contained, don't overwrite it
+            if currRange.issubset(prevRange):
+                continue
+            
+            #only need special handling if there is overlap but not a superset
+            if not prevRange.issubset(currRange):
+                #replace the stored range with the combined overlapping phrase
+                if start < starts[prevPhrase]:
+                    currPhrase = currPhrase + list(prevPhrase[len(overlap):])
+                else:
+                    currPhrase = list(prevPhrase) + currPhrase[len(overlap):]
+                currRange.update(prevRange | currRange)
+            del starts[prevPhrase]
+                
+        for i in currRange:
+            ranges[i] = tuple(currPhrase)
+        starts[tuple(currPhrase)] = min(currRange)        
+
+    return starts
+
+def makeDataPoint(metadata, start, length):
+    dependencies = splitDependencies(metadata['dependencies'], [start, start+length])
+    return DataPoint({'altlexLength': length,
+                      'altlex': {'dependencies': dependencies['altlex']},
+                      'sentences': [{'ner': metadata['ner'][start:],
+                                     'pos': metadata['pos'][start:],
+                                     'words': metadata['words'][start:],
+                                     'stems': metadata['stems'][start:],
+                                     'lemmas': metadata['lemmas'][start:],
+                                     'dependencies': dependencies['curr']},
+                                    {'ner': metadata['ner'][:start],
+                                     'pos': metadata['pos'][:start],
+                                     'words': metadata['words'][:start],
+                                     'stems': metadata['stems'][:start],
+                                     'lemmas': metadata['lemmas'][:start],
+                                     'dependencies': dependencies['prev']}]
+                      })
+
+def makeDataPointsFromAltlexes(metadata, altlexes, includeEmpty=False):
+    '''
+    given a sentence and its associated metadata, create one or more dictionaries by splitting on the given set of altlexes
+    if there are no altlexes, set the altlex length to be 0
+    find the longest applicable altlex in the set
+    
+    metadata - a dictionary containing ner, pos, words, lemmas, stems, dependencies
+    altlexes - a set of tuples of strings
+    '''
+
+    starts = findAltlexes(metadata['words'], altlexes)
+
+    datapoints = []
+    if includeEmpty:
+        starts[()] = 0
+    for altlex in starts:
+        #make new datapoint at this location
+        #print(altlex, starts[altlex], len(altlex))
+        datapoints.append(makeDataPoint(metadata, starts[altlex], len(altlex)))
+
+    #return a list of DataPoint objects
+    return datapoints
+
 class DataPoint:
     def __init__(self, dataDict):
         self._dataDict = dataDict
