@@ -33,7 +33,7 @@ def lemmatize(words, poses):
 
 def findPhrase(phrase, source):
     try:
-        start = [source[i:i+len(phrase)] for i in range(len(source))].index(phrase)
+        start = [tuple(source[i:i+len(phrase)]) for i in range(len(source))].index(tuple(phrase))
     except ValueError:
         return None
     return start
