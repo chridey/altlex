@@ -2,7 +2,7 @@
 
 Git repository for software associated with the 2016 ACL paper "Identifying Causal Relations Using Parallel Wikipedia Articles."
 
-##Dependencies
+## Dependencies
 ```
 flask
 gensim
@@ -17,7 +17,7 @@ MOSES
 
 KenLM
 
-##How To
+## How To
 
 For the entire pipeline, start at step 1.i using the Simple and English Wikipedia dumps in the format "Parallel Wikipedia Format".
 
@@ -71,9 +71,9 @@ Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv
 
   ```python altlex/misc/bootstrapping.py $features_file $parsed_pairs_directory ${session_name}_initLabels.json.gz```
 
-##Data Format
+## Data Format
 
-###Parallel Wikipedia Format
+### Parallel Wikipedia Format
 
 This is a gzipped, JSON-formatted file.  The "titles" array is the shared title name of the English and Simple Wikipedia articles.  The "articles" array consists of two arrays and each of those arrays must be the same length as the "titles" array and the indices into these arrays must point to the aligned articles and titles.  Each article within the articles array is an array of tokenized sentence strings (but not word tokenized).
 
