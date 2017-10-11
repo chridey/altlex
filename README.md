@@ -19,7 +19,14 @@ KenLM
 
 ## How To
 
-For the entire pipeline, start at step 1.i using the Simple and English Wikipedia dumps in the format "Parallel Wikipedia Format".
+### Causality Prediction
+
+To run the model on a plain text file, use the predictCausality script:
+
+```python altlex/misc/predictCausality.py $text_file```
+
+### Pipeline
+For the entire pipeline, start at step 0.1 using the Simple and English Wikipedia dumps in the format "Parallel Wikipedia Format".
 
 Given the data provided with the ACL submission (```altlex_train_paraphrases.tsv```), parse the paraphrase pairs in the format "Parsed Pairs Format", save the files into ```$parsed_pairs_directory```, and start at step 3.
 
