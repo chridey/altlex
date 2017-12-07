@@ -87,7 +87,7 @@ class AltlexHandler:
         featuresList = []
         for dataPoint in metadataList:
             features = self.featureExtractor.addFeatures(dataPoint)
-            print(dataPoint.getAltlex())
+            #print(dataPoint.getAltlex())
             #add interaction features
             if interaction:
                 filtered_features = filterFeatures(features,
@@ -116,3 +116,22 @@ class AltlexHandler:
 
         return self.classifier.predict(features_transformed)
     
+    def findAltlexes(self, sentences):
+        #take in a list/iterator of sentences
+        #return the range and label for each found altlex
+
+        for index,sentence in sentences:
+            for dataPoint in self.dataPoints(sentence):
+                dataPoints.append((index, dataPoint))
+
+        indices, dataPoints = zip(*dataPoints)
+        labels = self.predict(dataPoints)
+
+        ranges = []
+        for index, dataPoint, label in zip(indices, dataPoints, labels):
+            start = len(dataPoint.getPrevWords())
+            end = start + dataPoint.altlexLength
+            ranges.append((label, index, start, end))
+
+        return ranges
+            

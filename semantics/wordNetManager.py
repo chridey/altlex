@@ -17,7 +17,7 @@ class WordNetManager:
             synsets = []
             
         if len(synsets):
-            return synsets[0].lexname()
+            return synsets[0].lexname
         else:
             return None
 
