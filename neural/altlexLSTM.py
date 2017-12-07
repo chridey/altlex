@@ -11,7 +11,7 @@ DROP_OUT_RATE = 0.5
 
 class AltlexLSTM(object):
 
-    def __init__(self, M, D, embed_caps, d, We):
+    def __init__(self, M, D, embed_caps, d, We, DROP_OUT_RATE=DROP_OUT_RATE):
         
         # theano.config.exception_verbosity='high'
 

@@ -88,6 +88,19 @@ def compute_weight(gold):
     w = [1 if label == 0 else multiplier for label in gold]
     return r, np.asarray(w)
 
+def predict(lstm, X, mask, start, end):
+    scores = lstm.predict(X[:, :, 0], 
+                          X[:, :, 1], 
+                          X[:, :, 2], 
+                          X[:, :, 3], 
+                          X[:, :, 4], 
+                          X[:, :, 5], 
+                          mask, 
+                          start,
+                          end).tolist()
+    y_pred = np.asarray([1 if score > 0.5 else 0 for score in scores])
+    return y_pred
+
 def validate(lstm, i, X, y, mask, start, end):
     s = 'Epoch: {:1d}, Precision: {:.3f}, Recall: {:.3f}, F1: {:.3f}, Accuracy: {:.3f}'
     scores = lstm.predict(X[:, :, 0], 
@@ -129,6 +142,18 @@ def evaluate(lstm, X, y, mask, start, end):
     acc = float(count_match(y_pred, y))/len(y)
     print(s.format(p, r, f1, acc))
 
+def init_model(vocab, M=30):
+    D = [len(vocab[i]) for i in features if i in vocab]
+    embed_caps = [dimensions[i] for i in features if i in vocab]
+    d = 100    
+    # initialize pretrained word embeddings
+    model = gensim.models.KeyedVectors.load_word2vec_format('/proj/nlp/users/ethan/glove_word2vec_100d.txt', binary=False)
+    We = match_embeddings(model, vocab['words'])
+    
+    lstm = AltlexLSTM(M, D, embed_caps, d, We)
+
+    return lstm
+    
 def load(model, filename):
     params = np.load(filename)
     param_keys = map(lambda x: 'arr_' + str(x), sorted([int(i[4:]) for i in params.keys()]))

@@ -1,12 +1,15 @@
 import json
 import collections
+import os
 
 import numpy as np
 
 from altlex.featureExtraction.altlexHandler import AltlexHandler
-from altlex.neural.altlexLSTMClassifier import train as train_lstm, features
+from altlex.neural.altlexLSTMClassifier import train as train_lstm, features, init_model, load, predict
+from altlex.featureExtraction.dataPoint import findAltlexes
 
 derived_features = frozenset(('deps', 'altlex_position', 'root_position'))
+MAX_LEN = 30
 
 class NeuralAltlexHandler(AltlexHandler):
     def __init__(self,    
@@ -31,23 +34,20 @@ class NeuralAltlexHandler(AltlexHandler):
     @property
     def classifierFile(self):
         if self._classifierFile is None:
-            raise NotImplementedError
-            self._classifierFile = os.path.join(os.path.join(os.path.join(os.path.join(os.path.dirname(__file__),
-                                                            '..'), 'config'), 'models'),
-                                                            'full_plus_sgd_st1_inter1_unbalanced_combined_bootstrap.1')
-                                                            
+            self._classifierFile = os.path.join(os.path.dirname(__file__), 'model.npz')                                                            
         return self._classifierFile
     
     @property
     def classifier(self):
         if self._classifier is None:
-            self._classifier = joblib.load(self.classifierFile)
+            self._classifier = init_model(self.vocab)
+            load(self._classifier, self.classifierFile)
         return self._classifier
 
     @property
     def vocabFile(self):
         if self._vocabFile is None:
-            raise NotImplementedError
+            self._vocabFile = os.path.join(os.path.dirname(__file__), 'vocab.json')
         return self._vocabFile
     
     @property
@@ -125,7 +125,7 @@ class NeuralAltlexHandler(AltlexHandler):
             ret.append(indices)
         return ret
 
-    def get_shortened(self, sentence, MAX_LEN=30):
+    def get_shortened(self, sentence, MAX_LEN=MAX_LEN):
         tokens = sentence['words']
         start = 0
         end = len(tokens) - 1
@@ -141,7 +141,7 @@ class NeuralAltlexHandler(AltlexHandler):
                 end = start + MAX_LEN - 1
         return start, end
     
-    def preprocess(self, sentences, MAX_LEN=30):
+    def preprocess(self, sentences, MAX_LEN=MAX_LEN):
         sentences = list(sentences)
         X = np.zeros(shape=(len(sentences), MAX_LEN, len(self._features)), dtype=int)
         mask = np.zeros(shape=(len(sentences), MAX_LEN))
@@ -171,9 +171,9 @@ class NeuralAltlexHandler(AltlexHandler):
             start, end = self.get_shortened(sentence)
             starts.append(sentence['prev_len']-start)
             ends.append(sentence['prev_len'] + sentence['altlex_len'] - 1 - start)
-            if starts[-1] >= 30:
+            if starts[-1] >= MAX_LEN:
                 print('s', index, len(sentence['words']), starts[-1], start, end, sentence['prev_len'], sentence['altlex_len'], sentence['curr_len'])
-            if ends[-1] >= 30:
+            if ends[-1] >= MAX_LEN:
                 print('e', index, len(sentence['words']), ends[-1], start, end, sentence['prev_len'], sentence['altlex_len'], sentence['curr_len'])
                 
         return np.array(starts), np.array(ends)
@@ -214,8 +214,31 @@ class NeuralAltlexHandler(AltlexHandler):
                     test=(X_test, y_test, mask_test, altlex_start_test, altlex_end_test))
 
     def predict(self, data):
-        pass
+        X, mask = self.preprocess(data)
+        altlex_start, altlex_end = self.get_ranges(data)
+        return predict(self.classifier, X, mask, altlex_start, altlex_end)
     
     def findAltlexes(self, sentences):
         #first create new metadata with prev_len, altlex_len, curr_len to every sentence
-        pass
+        data = []
+        indices = []
+        for index,sentence in enumerate(sentences):
+            starts = findAltlexes(sentence['words'], self.causalAltlexes)
+            for altlex in starts:
+                datum = dict(sentence)
+                datum['prev_len'] = starts[altlex]
+                datum['altlex_len'] = len(altlex)
+                datum['curr_len'] = len(sentence['words']) - datum['prev_len'] - datum['altlex_len']
+                data.append(datum)
+                indices.append(index)
+
+        predictions = self.predict(data).tolist()
+
+        ranges = collections.defaultdict(list)
+        for index, sentence, prediction in zip(indices, data, predictions):
+            start = sentence['prev_len']
+            end = start + sentence['altlex_len']
+            ranges[index].append((prediction, start, end))
+        return ranges
+        
+        

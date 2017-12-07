@@ -7,7 +7,7 @@ from sklearn.externals import joblib
 
 from altlex.featureExtraction.featureExtractor import FeatureExtractor,filterFeatures,makeInteractionFeatures
 from altlex.featureExtraction import config
-from altlex.featureExtraction.dataPoint import makeDataPoint, makeDataPointsFromAltlexes
+from altlex.featureExtraction.dataPoint import makeDataPoint, makeDataPointsFromAltlexes, findAltlexes
 
 class AltlexHandler:
     def __init__(self,
@@ -120,18 +120,20 @@ class AltlexHandler:
         #take in a list/iterator of sentences
         #return the range and label for each found altlex
 
-        for index,sentence in sentences:
+        dataPoints = []
+        indices = []
+        for index,sentence in enumerate(sentences):
             for dataPoint in self.dataPoints(sentence):
-                dataPoints.append((index, dataPoint))
+                indices.append(index)
+                dataPoints.append(dataPoint)
 
-        indices, dataPoints = zip(*dataPoints)
         labels = self.predict(dataPoints)
 
-        ranges = []
+        ranges = collections.defaultdict(list)
         for index, dataPoint, label in zip(indices, dataPoints, labels):
             start = len(dataPoint.getPrevWords())
             end = start + dataPoint.altlexLength
-            ranges.append((label, index, start, end))
+            ranges[index].append((label, start, end))
 
         return ranges
             
