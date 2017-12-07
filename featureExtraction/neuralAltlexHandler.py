@@ -183,7 +183,9 @@ class NeuralAltlexHandler(AltlexHandler):
         ret = []
         for sentence in sentences:
             if sentence['prev_len'] + sentence['altlex_len'] + sentence['curr_len'] > len(sentence['words']):
-                continue
+                if sentence['prev_len'] + sentence['altlex_len'] > len(sentence['words']):
+                    continue
+                sentence['curr_len'] = len(sentence['words']) - (sentence['prev_len'] + sentence['altlex_len'])
             ret.append(sentence)
         return ret
     
