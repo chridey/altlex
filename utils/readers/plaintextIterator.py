@@ -41,7 +41,7 @@ class PlaintextIterator(object):
 
             offset = 0
             for sentence in parsed_line.sents:
-                metadata = dict(original=str(line),
+                metadata = dict(original=str(sentence),
                                 deps=[],
                                 lemmas=[],
                                 pos=[],
